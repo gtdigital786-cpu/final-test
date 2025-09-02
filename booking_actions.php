@@ -159,26 +159,11 @@ try {
                 require_once 'includes/sms_functions.php';
                 send_checkout_confirmation_sms($bookingId, $pdo);
                 
-                // Record checkout completion
+                // Record checkout completion - NO AUTOMATIC PAYMENT
                 $resourceName = $booking['custom_name'] ?: $booking['display_name'];
                 $duration = calculate_duration($booking['check_in'], $checkoutDateTime);
-                $amount = max(500, $duration['hours'] * 100);
                 
-                try {
-                    $stmt = $pdo->prepare("
-                        INSERT INTO payments (booking_id, resource_id, amount, payment_method, payment_status, admin_id, payment_notes) 
-                        VALUES (?, ?, ?, 'CHECKOUT_COMPLETE', 'COMPLETED', ?, ?)
-                    ");
-                    $stmt->execute([
-                        $bookingId, 
-                        $booking['resource_id'], 
-                        $amount, 
-                        $_SESSION['user_id'],
-                        "Checkout completed for {$resourceName} - Duration: {$duration['formatted']} - Checkout: {$checkoutDateTime}"
-                    ]);
-                } catch (Exception $e) {
-                    // Continue even if payment recording fails
-                }
+                // Note: Admin must manually mark payment after checkout
                 
                 redirect_with_message('grid.php', 'Checkout completed successfully at ' . date('M j, g:i A', strtotime($checkoutDateTime)) . '!', 'success');
             } else {

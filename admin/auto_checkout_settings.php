@@ -35,7 +35,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             try {
                 require_once '../includes/auto_checkout.php';
                 $autoCheckout = new AutoCheckout($pdo);
-                $result = $autoCheckout->executeDailyCheckout();
+                $result = $autoCheckout->testAutoCheckout();
                 
                 $message = "Test completed: {$result['status']} - Checked out: " . ($result['checked_out'] ?? 0) . " bookings";
                 redirect_with_message('auto_checkout_settings.php', $message, 'success');
@@ -69,9 +69,15 @@ $stmt->execute();
 $recentLogs = $stmt->fetchAll();
 
 // Get auto checkout statistics
-require_once '../includes/auto_checkout.php';
-$autoCheckout = new AutoCheckout($pdo);
-$stats = $autoCheckout->getCheckoutStats();
+$stmt = $pdo->prepare("
+    SELECT 
+        COUNT(*) as today_count,
+        COUNT(CASE WHEN DATE(created_at) >= DATE_SUB(CURDATE(), INTERVAL 7 DAY) THEN 1 END) as week_count
+    FROM auto_checkout_logs 
+    WHERE status = 'success'
+");
+$stmt->execute();
+$stats = $stmt->fetch();
 
 $flash = get_flash_message();
 ?>
@@ -201,14 +207,14 @@ $flash = get_flash_message();
             <div class="stats-grid">
                 <div class="stat-card">
                     <h4>Today's Auto Checkouts</h4>
-                    <div class="dashboard-value"><?= $stats['today']['count'] ?></div>
-                    <p>Revenue: <?= format_currency($stats['today']['amount']) ?></p>
+                    <div class="dashboard-value"><?= $stats['today_count'] ?? 0 ?></div>
+                    <p>Bookings processed today</p>
                 </div>
                 
                 <div class="stat-card">
                     <h4>This Week's Auto Checkouts</h4>
-                    <div class="dashboard-value"><?= $stats['week']['count'] ?></div>
-                    <p>Revenue: <?= format_currency($stats['week']['amount']) ?></p>
+                    <div class="dashboard-value"><?= $stats['week_count'] ?? 0 ?></div>
+                    <p>Bookings processed this week</p>
                 </div>
                 
                 <div class="stat-card">
@@ -290,12 +296,12 @@ $flash = get_flash_message();
                 <h4>Step 2: Create New Cron Job</h4>
                 <p><strong>Command to run:</strong></p>
                 <code style="background: white; padding: 0.5rem; border-radius: 4px; display: block; margin: 0.5rem 0;">
-                    /usr/bin/php /home/u261459251/domains/soft.galaxytribes.in/public_html/cron/auto_checkout_cron.php
+                    /usr/bin/php /home/u261459251/domains/lpstnashik.in/public_html/cron/auto_checkout_cron.php
                 </code>
                 
-                <p><strong>Schedule (run every 5 minutes):</strong></p>
+                <p><strong>Schedule (run daily at 10:00 AM):</strong></p>
                 <code style="background: white; padding: 0.5rem; border-radius: 4px; display: block; margin: 0.5rem 0;">
-                    */5 * * * *
+                    0 10 * * *
                 </code>
                 
                 <h4>Step 3: Test the Setup</h4>
@@ -304,9 +310,10 @@ $flash = get_flash_message();
                 <div style="background: rgba(255, 193, 7, 0.1); padding: 1rem; border-radius: 4px; margin-top: 1rem;">
                     <strong>⚠️ Important Notes:</strong>
                     <ul>
-                        <li>The cron job will run every 5 minutes but only execute checkout at the configured time</li>
+                        <li>The cron job will run daily at the configured time</li>
                         <li>Auto checkout will only run once per day at the specified time</li>
-                        <li>All active bookings will be automatically checked out and payment calculated</li>
+                        <li>All active bookings will be automatically checked out without payment calculation</li>
+                        <li>Admin must manually mark payments as paid/unpaid with custom amounts</li>
                         <li>SMS notifications will be sent to guests (if SMS is configured)</li>
                     </ul>
                 </div>

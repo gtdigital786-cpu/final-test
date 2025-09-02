@@ -2,16 +2,8 @@
 /**
  * Enhanced Auto Checkout Cron Job for L.P.S.T Hotel Booking System
  * 
- * HOSTINGER CRON JOB COMMANDS:
- * 
- * Option 1 (Recommended): Run every 5 minutes, checks if it's time
- * */5 * * * * /usr/bin/php /home/u261459251/domains/soft.galaxytribes.in/public_html/cron/auto_checkout_cron.php
- * 
- * Option 2: Run exactly at 10:00 AM daily
- * 0 10 * * * /usr/bin/php /home/u261459251/domains/soft.galaxytribes.in/public_html/cron/auto_checkout_cron.php
- * 
- * Option 3: Run every minute for testing (remove after testing)
- * * * * * * /usr/bin/php /home/u261459251/domains/soft.galaxytribes.in/public_html/cron/auto_checkout_cron.php
+ * HOSTINGER CRON JOB COMMAND:
+ * 0 10 * * * /usr/bin/php /home/u261459251/domains/lpstnashik.in/public_html/cron/auto_checkout_cron.php
  */
 
 // Set timezone first
@@ -46,7 +38,9 @@ function logMessage($message, $level = 'INFO') {
 $isManualRun = isset($_GET['manual_run']) || isset($_GET['test']) || php_sapi_name() !== 'cli';
 
 if ($isManualRun) {
-    header('Content-Type: application/json');
+    header('Content-Type: text/html');
+    echo "<!DOCTYPE html><html><head><title>Auto Checkout Test</title></head><body>";
+    echo "<h2>Auto Checkout Cron Test</h2>";
     logMessage("MANUAL AUTO CHECKOUT TEST STARTED", 'TEST');
 } else {
     logMessage("AUTOMATIC CRON AUTO CHECKOUT STARTED", 'CRON');
@@ -80,7 +74,8 @@ try {
     logMessage($error, 'ERROR');
     
     if ($isManualRun) {
-        echo json_encode(['status' => 'error', 'message' => $error, 'timestamp' => date('Y-m-d H:i:s')]);
+        echo "<p style='color: red;'>$error</p>";
+        echo "</body></html>";
     }
     exit(1);
 }
@@ -98,7 +93,8 @@ try {
     logMessage($error, 'ERROR');
     
     if ($isManualRun) {
-        echo json_encode(['status' => 'error', 'message' => $error, 'timestamp' => date('Y-m-d H:i:s')]);
+        echo "<p style='color: red;'>$error</p>";
+        echo "</body></html>";
     }
     exit(1);
 }
@@ -119,7 +115,24 @@ try {
     
     // Output result
     if ($isManualRun) {
+        echo "<h3>Test Results:</h3>";
+        echo "<pre style='background: #f8f9fa; padding: 1rem; border-radius: 8px;'>";
         echo json_encode($result, JSON_PRETTY_PRINT);
+        echo "</pre>";
+        
+        if ($result['status'] === 'completed') {
+            echo "<p style='color: green;'>✅ Auto checkout test completed successfully!</p>";
+            echo "<p>Checked out: " . ($result['checked_out'] ?? 0) . " bookings</p>";
+            echo "<p>Failed: " . ($result['failed'] ?? 0) . " bookings</p>";
+        } else {
+            echo "<p style='color: orange;'>⚠️ Test result: " . $result['status'] . "</p>";
+            if (isset($result['message'])) {
+                echo "<p>Message: " . htmlspecialchars($result['message']) . "</p>";
+            }
+        }
+        
+        echo "<p><a href='../admin/manual_checkout_test.php'>← Back to Manual Test Page</a></p>";
+        echo "</body></html>";
     } else {
         echo "Auto checkout executed: " . $result['status'] . "\n";
         if (isset($result['checked_out'])) {
@@ -142,13 +155,11 @@ try {
     logMessage("Stack trace: " . $e->getTraceAsString(), 'DEBUG');
     
     if ($isManualRun) {
-        http_response_code(500);
-        echo json_encode([
-            'status' => 'critical_error', 
-            'message' => $e->getMessage(),
-            'timestamp' => date('Y-m-d H:i:s'),
-            'trace' => $e->getTraceAsString()
-        ]);
+        echo "<p style='color: red;'>Critical Error: " . htmlspecialchars($e->getMessage()) . "</p>";
+        echo "<pre style='background: #f8f9fa; padding: 1rem; border-radius: 8px;'>";
+        echo htmlspecialchars($e->getTraceAsString());
+        echo "</pre>";
+        echo "</body></html>";
     } else {
         echo "Critical Error: " . $e->getMessage() . "\n";
     }

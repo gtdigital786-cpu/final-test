@@ -68,7 +68,7 @@ $flash = get_flash_message();
         <?php if ($autoEnabled): ?>
             <div style="background: linear-gradient(45deg, #28a745, #20c997); color: white; padding: 15px; border-radius: 10px; margin-bottom: 20px; text-align: center; font-weight: bold; box-shadow: 0 4px 15px rgba(40,167,69,0.3);">
                 🕙 DAILY AUTO CHECKOUT ACTIVE - All active bookings will be automatically checked out at <?= $autoTime ?> daily
-                <br><small style="opacity: 0.9;">Next auto checkout: Tomorrow at <?= $autoTime ?></small>
+                <br><small style="opacity: 0.9;">Next auto checkout: Tomorrow at <?= $autoTime ?> | Payment: Manual by Admin</small>
             </div>
         <?php else: ?>
             <div style="background: linear-gradient(45deg, #dc3545, #c82333); color: white; padding: 15px; border-radius: 10px; margin-bottom: 20px; text-align: center; font-weight: bold;">
@@ -167,7 +167,7 @@ $flash = get_flash_message();
                     
                     <!-- Auto Checkout Notice -->
                     <div style="font-size: 12px; color: rgba(255,255,255,0.8); margin-top: 0.5rem; text-align: center;">
-                        <?= $autoCheckoutNotice ?>
+                        <?= $autoCheckoutNotice ?> | Manual Payment
                     </div>
                     
                     <div class="action-buttons">

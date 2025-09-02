@@ -360,7 +360,9 @@ $flash = get_flash_message();
                 <p><strong>Auto Checkout:</strong> <?= $autoEnabled ? '✅ ENABLED' : '❌ DISABLED' ?></p>
                 <p><strong>Daily Time:</strong> <?= $autoTime ?></p>
                 <p><strong>Next Run:</strong> Tomorrow at <?= $autoTime ?></p>
+                <p><strong>Payment Mode:</strong> Manual - Admin marks payments after checkout</p>
                 <a href="../admin/auto_checkout_settings.php" class="btn btn-outline">View Detailed Settings</a>
+                <a href="../admin/manual_checkout_test.php" class="btn btn-warning">Manual Test Page</a>
             </div>
         </div>
         

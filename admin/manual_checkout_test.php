@@ -36,16 +36,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         } elseif ($action === 'update_time') {
             $newTime = $_POST['checkout_time'] ?? '10:00';
+            $enableTesting = isset($_POST['enable_testing']) ? '1' : '0';
             
             try {
                 $stmt = $pdo->prepare("
                     INSERT INTO system_settings (setting_key, setting_value) 
-                    VALUES ('auto_checkout_time', ?)
-                    ON DUPLICATE KEY UPDATE setting_value = ?
+                    VALUES ('auto_checkout_time', ?), ('testing_mode_enabled', ?)
+                    ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)
                 ");
-                $stmt->execute([$newTime, $newTime]);
+                $stmt->execute([$newTime, $enableTesting]);
                 
-                redirect_with_message('manual_checkout_test.php', 'Auto checkout time updated to ' . $newTime, 'success');
+                redirect_with_message('manual_checkout_test.php', 'Auto checkout time updated to ' . $newTime . ($enableTesting ? ' with testing mode enabled' : ''), 'success');
             } catch (Exception $e) {
                 $error = 'Failed to update time: ' . $e->getMessage();
             }
@@ -62,6 +63,7 @@ while ($row = $stmt->fetch()) {
 
 $autoCheckoutTime = $settings['auto_checkout_time'] ?? '10:00';
 $autoCheckoutEnabled = ($settings['auto_checkout_enabled'] ?? '1') === '1';
+$testingModeEnabled = ($settings['testing_mode_enabled'] ?? '0') === '1';
 $lastRun = $settings['last_auto_checkout_run'] ?? '';
 
 // Get active bookings count
@@ -186,6 +188,10 @@ $flash = get_flash_message();
                 <div>
                     <strong>Active Bookings:</strong> <?= $activeBookingsCount ?>
                 </div>
+                <div>
+                    <span class="status-indicator <?= $testingModeEnabled ? 'status-active' : 'status-inactive' ?>"></span>
+                    <strong>Testing Mode:</strong> <?= $testingModeEnabled ? 'ENABLED' : 'DISABLED' ?>
+                </div>
             </div>
             <?php if ($lastRun): ?>
                 <p style="margin-top: 1rem; opacity: 0.9;">
@@ -205,18 +211,25 @@ $flash = get_flash_message();
                 <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
                 <input type="hidden" name="action" value="update_time">
                 
-                <div style="display: flex; gap: 1rem; align-items: end;">
-                    <div class="form-group" style="margin: 0;">
+                <div style="display: flex; gap: 1rem; align-items: end; flex-wrap: wrap;">
+                    <div class="form-group" style="margin: 0; min-width: 200px;">
                         <label for="checkout_time" class="form-label">Auto Checkout Time</label>
                         <input type="time" id="checkout_time" name="checkout_time" class="form-control" 
                                value="<?= date('H:i', strtotime('+1 minute')) ?>" required>
                     </div>
+                    <div class="form-group" style="margin: 0;">
+                        <label class="form-label">
+                            <input type="checkbox" name="enable_testing" <?= $testingModeEnabled ? 'checked' : '' ?>>
+                            Enable Testing Mode
+                        </label>
+                        <small style="display: block; color: var(--dark-color);">Allows immediate testing regardless of time</small>
+                    </div>
                     <button type="submit" class="btn btn-warning">
-                        ⏰ Update Time
+                        ⏰ Update Time & Settings
                     </button>
                 </div>
                 
-                <small style="color: var(--dark-color);">
+                <small style="color: var(--dark-color); display: block; margin-top: 0.5rem;">
                     Current setting: <?= $autoCheckoutTime ?> | Suggested: <?= date('H:i', strtotime('+1 minute')) ?> (1 minute from now)
                 </small>
             </form>
@@ -304,41 +317,28 @@ $flash = get_flash_message();
                 <ul>
                     <li><strong>Auto Checkout:</strong> <?= $autoCheckoutEnabled ? '✅ Enabled' : '❌ Disabled' ?></li>
                     <li><strong>Daily Time:</strong> <?= $autoCheckoutTime ?> (Asia/Kolkata timezone)</li>
+                    <li><strong>Testing Mode:</strong> <?= $testingModeEnabled ? '✅ Enabled' : '❌ Disabled' ?></li>
                     <li><strong>Current Server Time:</strong> <?= date('Y-m-d H:i:s') ?></li>
                     <li><strong>Active Bookings:</strong> <?= $activeBookingsCount ?> bookings ready for checkout</li>
-                    <li><strong>Cron Job:</strong> Should run every 5 minutes or at <?= $autoCheckoutTime ?> daily</li>
+                    <li><strong>Cron Job:</strong> Should run daily at <?= $autoCheckoutTime ?></li>
                     <li><strong>Manual Testing:</strong> Available anytime for admin/owner</li>
                 </ul>
                 
                 <h4>How It Works:</h4>
                 <ol>
-                    <li>Cron job runs every 5 minutes (or at <?= $autoCheckoutTime ?>)</li>
-                    <li>System checks if it's time for auto checkout (<?= $autoCheckoutTime ?> by default)</li>
+                    <li>Cron job runs daily at <?= $autoCheckoutTime ?> (or when testing mode is enabled)</li>
+                    <li>System checks if it's time for auto checkout</li>
                     <li>All active bookings are automatically checked out</li>
-                    <li>Payment records are created automatically</li>
+                    <li>No automatic payment calculation - admin marks payments manually</li>
                     <li>SMS notifications are sent to guests</li>
                     <li>Detailed logs are maintained for tracking</li>
                 </ol>
                 
-                <h4>Hostinger Cron Job Commands:</h4>
+                <h4>Hostinger Cron Job Command:</h4>
                 <div style="background: white; padding: 1rem; border-radius: 4px; margin: 0.5rem 0;">
-                    <p><strong>Option 1 (Recommended):</strong> Run every 5 minutes</p>
+                    <p><strong>Daily at <?= $autoCheckoutTime ?>:</strong></p>
                     <code style="display: block; background: #f8f9fa; padding: 0.5rem; border-radius: 4px;">
-                        */5 * * * * /usr/bin/php /home/u261459251/domains/soft.galaxytribes.in/public_html/cron/auto_checkout_cron.php
-                    </code>
-                </div>
-                
-                <div style="background: white; padding: 1rem; border-radius: 4px; margin: 0.5rem 0;">
-                    <p><strong>Option 2:</strong> Run exactly at <?= $autoCheckoutTime ?> daily</p>
-                    <code style="display: block; background: #f8f9fa; padding: 0.5rem; border-radius: 4px;">
-                        0 10 * * * /usr/bin/php /home/u261459251/domains/soft.galaxytribes.in/public_html/cron/auto_checkout_cron.php
-                    </code>
-                </div>
-                
-                <div style="background: white; padding: 1rem; border-radius: 4px; margin: 0.5rem 0;">
-                    <p><strong>Option 3 (Testing):</strong> Run every minute</p>
-                    <code style="display: block; background: #f8f9fa; padding: 0.5rem; border-radius: 4px;">
-                        * * * * * /usr/bin/php /home/u261459251/domains/soft.galaxytribes.in/public_html/cron/auto_checkout_cron.php
+                        0 10 * * * /usr/bin/php /home/u261459251/domains/lpstnashik.in/public_html/cron/auto_checkout_cron.php
                     </code>
                 </div>
             </div>
@@ -405,6 +405,7 @@ $flash = get_flash_message();
                 <div>Next Auto Checkout: Tomorrow at <?= $autoCheckoutTime ?></div>
                 <div>Active Bookings: <?= $activeBookingsCount ?></div>
                 <div>System Status: <span style="color: <?= $autoCheckoutEnabled ? 'green' : 'red' ?>;"><?= $autoCheckoutEnabled ? 'ACTIVE' : 'DISABLED' ?></span></div>
+                <div>Testing Mode: <span style="color: <?= $testingModeEnabled ? 'green' : 'red' ?>;"><?= $testingModeEnabled ? 'ENABLED' : 'DISABLED' ?></span></div>
             </div>
             
             <div style="margin-top: 1rem;">

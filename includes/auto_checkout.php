@@ -2,6 +2,7 @@
 /**
  * Enhanced Auto Checkout System for L.P.S.T Hotel Booking System
  * Fixed to work properly with manual testing and daily automatic checkout
+ * No automatic payment calculation - admin marks payments manually
  */
 
 class AutoCheckout {
@@ -40,13 +41,15 @@ class AutoCheckout {
             $checkoutTime = $settings['auto_checkout_time'];
             $today = date('Y-m-d');
             
-            // Check if this is a manual run
+            // Check if this is a manual run or testing mode
             $isManualRun = $this->isManualRun();
+            $testingMode = $settings['testing_mode_enabled'];
             $this->log("Manual run: " . ($isManualRun ? 'YES' : 'NO'));
+            $this->log("Testing mode: " . ($testingMode ? 'YES' : 'NO'));
             $this->log("Current time: $currentTime, Checkout time: $checkoutTime");
             
-            // For automatic cron runs, check if it's the right time
-            if (!$isManualRun) {
+            // For automatic cron runs, check if it's the right time (unless testing mode is enabled)
+            if (!$isManualRun && !$testingMode) {
                 // Allow execution within 30 minutes of scheduled time
                 $scheduledMinutes = $this->timeToMinutes($checkoutTime);
                 $currentMinutes = $this->timeToMinutes($currentTime);
@@ -170,7 +173,7 @@ class AutoCheckout {
     }
     
     /**
-     * Checkout a specific booking
+     * Checkout a specific booking - NO AUTOMATIC PAYMENT CALCULATION
      */
     private function checkoutBooking($booking) {
         try {
@@ -179,50 +182,31 @@ class AutoCheckout {
             $checkOutTime = date('Y-m-d H:i:s');
             $checkInTime = $booking['actual_check_in'] ?: $booking['check_in'];
             
-            // Calculate duration
+            // Calculate duration for logging only
             $start = new DateTime($checkInTime);
             $end = new DateTime($checkOutTime);
             $diff = $start->diff($end);
             $durationMinutes = ($diff->days * 24 * 60) + ($diff->h * 60) + $diff->i;
-            
-            // Get rates from settings
-            $settings = $this->getSystemSettings();
-            $roomRate = floatval($settings['auto_checkout_rate_room'] ?? 100);
-            $hallRate = floatval($settings['auto_checkout_rate_hall'] ?? 500);
-            
-            $hourlyRate = $booking['type'] === 'hall' ? $hallRate : $roomRate;
             $hours = max(1, ceil($durationMinutes / 60)); // Minimum 1 hour
-            $amount = $hours * $hourlyRate;
             
-            $this->log("Checkout calculation - Duration: {$hours}h, Rate: ₹{$hourlyRate}/h, Amount: ₹{$amount}");
+            $this->log("Checkout calculation - Duration: {$hours}h - NO AUTOMATIC PAYMENT");
             
-            // Update booking
+            // Update booking - NO PAYMENT CALCULATION
             $stmt = $this->pdo->prepare("
                 UPDATE bookings 
                 SET status = 'COMPLETED',
                     actual_check_out = ?,
                     duration_minutes = ?,
-                    total_amount = ?,
                     auto_checkout_processed = 1,
                     actual_checkout_date = CURDATE(),
-                    actual_checkout_time = CURTIME(),
-                    is_paid = 1
+                    actual_checkout_time = CURTIME()
                 WHERE id = ?
             ");
-            $stmt->execute([$checkOutTime, $durationMinutes, $amount, $booking['id']]);
+            $stmt->execute([$checkOutTime, $durationMinutes, $booking['id']]);
             
-            // Create payment record
-            $stmt = $this->pdo->prepare("
-                INSERT INTO payments 
-                (booking_id, resource_id, amount, payment_method, payment_status, payment_notes, admin_id) 
-                VALUES (?, ?, ?, 'AUTO_CHECKOUT', 'COMPLETED', ?, 1)
-            ");
-            $paymentNotes = "Auto checkout at {$checkOutTime} - Duration: {$hours}h - Rate: ₹{$hourlyRate}/hour";
-            $stmt->execute([$booking['id'], $booking['resource_id'], $amount, $paymentNotes]);
-            
-            // Log the checkout
+            // Log the checkout - NO PAYMENT RECORD
             $resourceName = $booking['custom_name'] ?: $booking['display_name'];
-            $notes = "Automatic checkout - Duration: {$hours}h - Amount: ₹{$amount}";
+            $notes = "Automatic checkout - Duration: {$hours}h - Payment to be marked manually by admin";
             
             $stmt = $this->pdo->prepare("
                 INSERT INTO auto_checkout_logs 
@@ -243,13 +227,13 @@ class AutoCheckout {
             $this->sendCheckoutSMS($booking);
             
             $this->pdo->commit();
-            $this->log("Successfully checked out booking ID: " . $booking['id']);
+            $this->log("Successfully checked out booking ID: " . $booking['id'] . " - NO PAYMENT CALCULATED");
             
             return [
                 'success' => true, 
-                'amount' => $amount, 
                 'duration' => $hours,
-                'resource_name' => $resourceName
+                'resource_name' => $resourceName,
+                'payment_note' => 'Admin must mark payment manually'
             ];
             
         } catch (Exception $e) {
@@ -300,9 +284,7 @@ class AutoCheckout {
                 'timezone' => $settings['timezone'] ?? 'Asia/Kolkata',
                 'last_auto_checkout_run' => $settings['last_auto_checkout_run'] ?? '',
                 'checkout_grace_minutes' => intval($settings['checkout_grace_minutes'] ?? 30),
-                'auto_checkout_rate_room' => $settings['auto_checkout_rate_room'] ?? '100',
-                'auto_checkout_rate_hall' => $settings['auto_checkout_rate_hall'] ?? '500',
-                'manual_checkout_enabled' => ($settings['manual_checkout_enabled'] ?? '1') === '1',
+                'testing_mode_enabled' => ($settings['testing_mode_enabled'] ?? '0') === '1',
                 'debug_mode' => ($settings['debug_mode'] ?? '1') === '1'
             ];
         } catch (Exception $e) {
@@ -314,9 +296,7 @@ class AutoCheckout {
                 'timezone' => 'Asia/Kolkata',
                 'last_auto_checkout_run' => '',
                 'checkout_grace_minutes' => 30,
-                'auto_checkout_rate_room' => '100',
-                'auto_checkout_rate_hall' => '500',
-                'manual_checkout_enabled' => true,
+                'testing_mode_enabled' => false,
                 'debug_mode' => true
             ];
         }
@@ -369,7 +349,7 @@ class AutoCheckout {
      */
     private function logSystemActivity($successful, $failed) {
         try {
-            $description = "Auto checkout completed: {$successful} successful, {$failed} failed";
+            $description = "Auto checkout completed: {$successful} successful, {$failed} failed - No automatic payment calculation";
             $stmt = $this->pdo->prepare("
                 INSERT INTO activity_logs (activity_type, description) 
                 VALUES ('auto_checkout', ?)
@@ -405,21 +385,17 @@ class AutoCheckout {
             
             // Today's stats
             $stmt = $this->pdo->prepare("
-                SELECT COUNT(*) as count, 
-                       COALESCE(SUM(p.amount), 0) as total_amount
+                SELECT COUNT(*) as count
                 FROM auto_checkout_logs acl
-                LEFT JOIN payments p ON acl.booking_id = p.booking_id AND p.payment_method = 'AUTO_CHECKOUT'
                 WHERE DATE(acl.created_at) = ? AND acl.status = 'success'
             ");
             $stmt->execute([$today]);
             $todayStats = $stmt->fetch();
             
             // Week's stats
-            $stmt = $pdo->prepare("
-                SELECT COUNT(*) as count, 
-                       COALESCE(SUM(p.amount), 0) as total_amount
+            $stmt = $this->pdo->prepare("
+                SELECT COUNT(*) as count
                 FROM auto_checkout_logs acl
-                LEFT JOIN payments p ON acl.booking_id = p.booking_id AND p.payment_method = 'AUTO_CHECKOUT'
                 WHERE DATE(acl.created_at) >= ? AND acl.status = 'success'
             ");
             $stmt->execute([$weekStart]);
@@ -427,19 +403,17 @@ class AutoCheckout {
             
             return [
                 'today' => [
-                    'count' => $todayStats['count'] ?: 0,
-                    'amount' => $todayStats['total_amount'] ?: 0
+                    'count' => $todayStats['count'] ?: 0
                 ],
                 'week' => [
-                    'count' => $weekStats['count'] ?: 0,
-                    'amount' => $weekStats['total_amount'] ?: 0
+                    'count' => $weekStats['count'] ?: 0
                 ]
             ];
         } catch (Exception $e) {
             $this->log("Error getting stats: " . $e->getMessage(), 'ERROR');
             return [
-                'today' => ['count' => 0, 'amount' => 0],
-                'week' => ['count' => 0, 'amount' => 0]
+                'today' => ['count' => 0],
+                'week' => ['count' => 0]
             ];
         }
     }
@@ -468,15 +442,23 @@ class AutoCheckout {
             $stmt->execute();
             $bookings = $stmt->fetchAll();
             
-            $results = [];
+            $successful = 0;
+            $failed = 0;
+            
             foreach ($bookings as $booking) {
-                $results[] = $this->checkoutBooking($booking);
+                $result = $this->checkoutBooking($booking);
+                if ($result['success']) {
+                    $successful++;
+                } else {
+                    $failed++;
+                }
             }
             
             return [
                 'status' => 'force_completed',
                 'total_processed' => count($bookings),
-                'results' => $results,
+                'checked_out' => $successful,
+                'failed' => $failed,
                 'timestamp' => date('Y-m-d H:i:s')
             ];
             
