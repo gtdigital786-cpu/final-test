@@ -2,7 +2,12 @@
 require_once '../includes/functions.php';
 require_once '../config/database.php';
 
-require_role('ADMIN');
+// Redirect admins to logs page - only owner can test auto checkout
+if ($_SESSION['role'] === 'ADMIN') {
+    redirect_with_message('../grid.php', 'Only owner can test auto checkout. Contact owner for testing.', 'error');
+}
+
+require_role('OWNER');
 
 $database = new Database();
 $pdo = $database->getConnection();

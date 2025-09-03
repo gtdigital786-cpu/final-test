@@ -48,17 +48,17 @@ class AutoCheckout {
             $this->log("Testing mode: " . ($testingMode ? 'YES' : 'NO'));
             $this->log("Current time: $currentTime, Checkout time: $checkoutTime");
             
-            // For automatic cron runs, check if it's the right time (unless testing mode is enabled)
+            // Enhanced time checking - more precise for 10:00 AM execution
             if (!$isManualRun && !$testingMode) {
-                // Allow execution within 30 minutes of scheduled time
+                // Check if it's exactly 10:00 AM or within 5 minutes
                 $scheduledMinutes = $this->timeToMinutes($checkoutTime);
                 $currentMinutes = $this->timeToMinutes($currentTime);
-                $gracePeriod = 30; // 30 minutes grace period
+                $gracePeriod = 5; // 5 minutes grace period for precise execution
                 
                 $this->log("Scheduled minutes: $scheduledMinutes, Current minutes: $currentMinutes, Difference: " . abs($currentMinutes - $scheduledMinutes));
                 
                 if (abs($currentMinutes - $scheduledMinutes) > $gracePeriod) {
-                    $this->log("Not time for auto checkout yet", 'INFO');
+                    $this->log("Not time for auto checkout yet. Current: $currentTime, Required: $checkoutTime", 'INFO');
                     return [
                         'status' => 'not_time',
                         'message' => "Not time for auto checkout. Current: $currentTime, Scheduled: $checkoutTime",
@@ -148,26 +148,20 @@ class AutoCheckout {
     private function getBookingsForCheckout() {
         $today = date('Y-m-d');
         
-        // Get all active bookings that haven't been auto-checked out today
+        // Get all active bookings that need checkout - improved query for 10:00 AM execution
         $stmt = $this->pdo->prepare("
             SELECT b.*, r.display_name, r.custom_name, r.type
             FROM bookings b 
             JOIN resources r ON b.resource_id = r.id 
             WHERE b.status IN ('BOOKED', 'PENDING')
-            AND (b.auto_checkout_processed = 0 OR b.auto_checkout_processed IS NULL)
-            AND b.id NOT IN (
-                SELECT DISTINCT COALESCE(booking_id, 0)
-                FROM auto_checkout_logs 
-                WHERE DATE(created_at) = ? 
-                AND status = 'success'
-                AND booking_id IS NOT NULL
-            )
+            AND COALESCE(b.auto_checkout_processed, 0) = 0
+            AND DATE(b.check_in) <= CURDATE()
             ORDER BY b.check_in ASC
         ");
-        $stmt->execute([$today]);
+        $stmt->execute();
         
         $bookings = $stmt->fetchAll();
-        $this->log("Query found " . count($bookings) . " bookings for checkout");
+        $this->log("Query found " . count($bookings) . " active bookings for 10:00 AM checkout");
         
         return $bookings;
     }
@@ -199,14 +193,15 @@ class AutoCheckout {
                     duration_minutes = ?,
                     auto_checkout_processed = 1,
                     actual_checkout_date = CURDATE(),
-                    actual_checkout_time = CURTIME()
+                    actual_checkout_time = CURTIME(),
+                    payment_notes = CONCAT(COALESCE(payment_notes, ''), ' - Auto checkout at 10:00 AM')
                 WHERE id = ?
             ");
             $stmt->execute([$checkOutTime, $durationMinutes, $booking['id']]);
             
             // Log the checkout - NO PAYMENT RECORD
             $resourceName = $booking['custom_name'] ?: $booking['display_name'];
-            $notes = "Automatic checkout - Duration: {$hours}h - Payment to be marked manually by admin";
+            $notes = "Daily 10:00 AM auto checkout - Duration: {$hours}h - Admin must mark payment manually";
             
             $stmt = $this->pdo->prepare("
                 INSERT INTO auto_checkout_logs 
@@ -219,7 +214,7 @@ class AutoCheckout {
                 $resourceName,
                 $booking['client_name'],
                 date('Y-m-d'),
-                date('H:i:s'),
+                '10:00:00', // Always log as 10:00 AM checkout
                 $notes
             ]);
             
@@ -227,13 +222,13 @@ class AutoCheckout {
             $this->sendCheckoutSMS($booking);
             
             $this->pdo->commit();
-            $this->log("Successfully checked out booking ID: " . $booking['id'] . " - NO PAYMENT CALCULATED");
+            $this->log("Successfully checked out booking ID: " . $booking['id'] . " at 10:00 AM - Admin must mark payment");
             
             return [
                 'success' => true, 
                 'duration' => $hours,
                 'resource_name' => $resourceName,
-                'payment_note' => 'Admin must mark payment manually'
+                'payment_note' => 'Admin must mark payment manually after 10:00 AM auto checkout'
             ];
             
         } catch (Exception $e) {

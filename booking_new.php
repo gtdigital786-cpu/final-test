@@ -174,7 +174,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <div class="form-group">
                     <label for="check_out" class="form-label">Check-out Date & Time *</label>
                     <input type="datetime-local" id="check_out" name="check_out" class="form-control" required
-                           value="<?= isset($_POST['check_out']) ? $_POST['check_out'] : date('Y-m-d\TH:i', strtotime('+1 day', time())) ?>">
+                           value="<?= isset($_POST['check_out']) ? $_POST['check_out'] : date('Y-m-d\T10:00', strtotime('+1 day', time())) ?>">
+                    <small style="color: var(--primary-color); font-weight: 600;">
+                        ⏰ Default: 10:00 AM next day (Daily Auto Checkout Time)
+                    </small>
                 </div>
                 
                 <div style="display: flex; gap: 1rem;">
@@ -231,6 +234,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (!validateBookingForm()) {
                 e.preventDefault();
             }
+        });
+        
+        // Set default checkout time to 10:00 AM when check-in changes
+        document.getElementById('check_in').addEventListener('change', function() {
+            const checkinDate = new Date(this.value);
+            const checkoutDate = new Date(checkinDate);
+            checkoutDate.setDate(checkoutDate.getDate() + 1);
+            checkoutDate.setHours(10, 0, 0, 0); // Set to 10:00 AM
+            
+            const checkoutString = checkoutDate.toISOString().slice(0, 16);
+            document.getElementById('check_out').value = checkoutString;
         });
     </script>
     <script src="assets/script.js"></script>

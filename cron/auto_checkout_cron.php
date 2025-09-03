@@ -4,6 +4,8 @@
  * 
  * HOSTINGER CRON JOB COMMAND:
  * 0 10 * * * /usr/bin/php /home/u261459251/domains/lpstnashik.in/public_html/cron/auto_checkout_cron.php
+ * 
+ * This runs daily at exactly 10:00 AM and checks out all active bookings
  */
 
 // Set timezone first
@@ -40,15 +42,16 @@ $isManualRun = isset($_GET['manual_run']) || isset($_GET['test']) || php_sapi_na
 if ($isManualRun) {
     header('Content-Type: text/html');
     echo "<!DOCTYPE html><html><head><title>Auto Checkout Test</title></head><body>";
-    echo "<h2>Auto Checkout Cron Test</h2>";
+    echo "<h2>🕙 Daily 10:00 AM Auto Checkout Test</h2>";
+    echo "<p><strong>Current Time:</strong> " . date('H:i:s') . " (Asia/Kolkata)</p>";
     logMessage("MANUAL AUTO CHECKOUT TEST STARTED", 'TEST');
 } else {
-    logMessage("AUTOMATIC CRON AUTO CHECKOUT STARTED", 'CRON');
+    logMessage("DAILY 10:00 AM AUTO CHECKOUT STARTED", 'CRON');
 }
 
-logMessage("PHP SAPI: " . php_sapi_name());
-logMessage("Current working directory: " . getcwd());
-logMessage("Script path: " . __FILE__);
+logMessage("Execution mode: " . ($isManualRun ? 'MANUAL TEST' : 'AUTOMATIC CRON'));
+logMessage("Target time: 10:00 AM daily");
+logMessage("Current time: " . date('H:i:s'));
 
 // Database connection with enhanced error handling
 try {
@@ -159,6 +162,7 @@ try {
         echo "<pre style='background: #f8f9fa; padding: 1rem; border-radius: 8px;'>";
         echo htmlspecialchars($e->getTraceAsString());
         echo "</pre>";
+        echo "<p><a href='../owner/settings.php'>← Back to Owner Settings</a></p>";
         echo "</body></html>";
     } else {
         echo "Critical Error: " . $e->getMessage() . "\n";

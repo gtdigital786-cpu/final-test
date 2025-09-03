@@ -200,14 +200,16 @@ $flash = get_flash_message();
         
         <!-- Recent Activity -->
         <div class="form-container">
-            <h3>Recent Bookings (Last 10)</h3>
+            <h3>Recent Bookings by You (Last 10)</h3>
             <div style="overflow-x: auto;">
                 <table style="width: 100%; border-collapse: collapse;">
                     <thead>
                         <tr style="background: var(--light-color);">
                             <th style="padding: 0.75rem; text-align: left; border-bottom: 1px solid var(--border-color);">Resource</th>
+                            <th style="padding: 0.75rem; text-align: left; border-bottom: 1px solid var(--border-color);">Room Number</th>
                             <th style="padding: 0.75rem; text-align: left; border-bottom: 1px solid var(--border-color);">Client</th>
                             <th style="padding: 0.75rem; text-align: left; border-bottom: 1px solid var(--border-color);">Status</th>
+                            <th style="padding: 0.75rem; text-align: left; border-bottom: 1px solid var(--border-color);">Auto Checkout</th>
                             <th style="padding: 0.75rem; text-align: left; border-bottom: 1px solid var(--border-color);">Created</th>
                         </tr>
                     </thead>
@@ -215,7 +217,22 @@ $flash = get_flash_message();
                         <?php foreach ($recentBookings as $booking): ?>
                             <tr>
                                 <td style="padding: 0.75rem; border-bottom: 1px solid var(--border-color);">
-                                    <?= htmlspecialchars($booking['display_name']) ?>
+                                    <?= htmlspecialchars($booking['custom_name'] ?: $booking['display_name']) ?>
+                                </td>
+                                <td style="padding: 0.75rem; border-bottom: 1px solid var(--border-color);">
+                                    <strong style="color: var(--primary-color);">
+                                        <?php 
+                                        // Extract actual room number from display name or custom name
+                                        $roomNumber = '';
+                                        if ($booking['custom_name']) {
+                                            $roomNumber = $booking['custom_name'];
+                                        } else {
+                                            preg_match('/(\d+)/', $booking['display_name'], $matches);
+                                            $roomNumber = $matches[0] ?? $booking['identifier'];
+                                        }
+                                        echo htmlspecialchars($roomNumber);
+                                        ?>
+                                    </strong>
                                 </td>
                                 <td style="padding: 0.75rem; border-bottom: 1px solid var(--border-color);">
                                     <?= htmlspecialchars($booking['client_name']) ?>
@@ -226,12 +243,54 @@ $flash = get_flash_message();
                                     </span>
                                 </td>
                                 <td style="padding: 0.75rem; border-bottom: 1px solid var(--border-color);">
+                                    <span style="color: var(--success-color); font-weight: 600;">
+                                        ✅ 10:00 AM Daily
+                                    </span>
+                                </td>
+                                <td style="padding: 0.75rem; border-bottom: 1px solid var(--border-color);">
                                     <?= date('M j, g:i A', strtotime($booking['created_at'])) ?>
                                 </td>
                             </tr>
                         <?php endforeach; ?>
                     </tbody>
                 </table>
+            </div>
+        </div>
+        
+        <!-- Auto Checkout Information for Admin -->
+        <div class="form-container">
+            <h3>🕙 Auto Checkout Information</h3>
+            <div style="background: rgba(37, 99, 235, 0.1); padding: 1.5rem; border-radius: 8px;">
+                <?php
+                // Get auto checkout settings
+                $stmt = $pdo->query("SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('auto_checkout_enabled', 'auto_checkout_time', 'last_auto_checkout_run')");
+                $autoSettings = [];
+                while ($row = $stmt->fetch()) {
+                    $autoSettings[$row['setting_key']] = $row['setting_value'];
+                }
+                $autoEnabled = ($autoSettings['auto_checkout_enabled'] ?? '1') === '1';
+                $autoTime = $autoSettings['auto_checkout_time'] ?? '10:00';
+                $lastRun = $autoSettings['last_auto_checkout_run'] ?? '';
+                ?>
+                
+                <h4 style="color: var(--primary-color);">System Status (View Only)</h4>
+                <ul style="color: var(--dark-color);">
+                    <li><strong>Auto Checkout:</strong> <?= $autoEnabled ? '✅ ENABLED' : '❌ DISABLED' ?></li>
+                    <li><strong>Daily Time:</strong> <?= $autoTime ?> (Asia/Kolkata)</li>
+                    <li><strong>Next Run:</strong> Tomorrow at <?= $autoTime ?></li>
+                    <li><strong>Current Time:</strong> <?= date('H:i') ?></li>
+                    <?php if ($lastRun): ?>
+                        <li><strong>Last Run:</strong> <?= date('M j, Y H:i', strtotime($lastRun)) ?></li>
+                    <?php endif; ?>
+                    <li><strong>Payment Mode:</strong> Manual - You mark payments after auto checkout</li>
+                    <li><strong>Default Checkout:</strong> All your bookings default to 10:00 AM checkout</li>
+                </ul>
+                
+                <div style="margin-top: 1rem; padding: 1rem; background: rgba(255, 255, 255, 0.8); border-radius: 4px;">
+                    <p style="margin: 0; color: var(--dark-color); font-weight: 600;">
+                        ℹ️ Note: Only the owner can modify auto checkout settings. Contact owner to change auto checkout time or disable the system.
+                    </p>
+                </div>
             </div>
         </div>
     </div>

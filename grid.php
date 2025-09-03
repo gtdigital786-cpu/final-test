@@ -34,7 +34,7 @@ $flash = get_flash_message();
     <nav class="top-nav">
         <div class="nav-links">
             <a href="advanced.php" class="nav-button">Advanced Booking</a>
-            <a href="admin/auto_checkout_settings.php" class="nav-button">Auto Checkout</a>
+            <a href="admin/auto_checkout_logs.php" class="nav-button">Checkout Logs</a>
         </div>
         <a href="/" class="nav-brand">L.P.S.T Bookings</a>
         <div class="nav-links">

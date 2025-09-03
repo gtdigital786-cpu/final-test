@@ -141,6 +141,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
                 break;
                 
+            case 'enable_testing':
+                try {
+                    $stmt = $pdo->prepare("
+                        INSERT INTO system_settings (setting_key, setting_value) 
+                        VALUES ('testing_mode_enabled', '1')
+                        ON DUPLICATE KEY UPDATE setting_value = '1'
+                    ");
+                    $stmt->execute();
+                    redirect_with_message('settings.php', 'Testing mode enabled! Auto checkout can now be tested anytime.', 'success');
+                } catch (Exception $e) {
+                    $error = 'Failed to enable testing mode.';
+                }
+                break;
+                
+            case 'test_auto_checkout':
+                try {
+                    require_once '../includes/auto_checkout.php';
+                    $autoCheckout = new AutoCheckout($pdo);
+                    $result = $autoCheckout->testAutoCheckout();
+                    
+                    $message = "Auto checkout test completed: " . $result['status'];
+                    if (isset($result['checked_out'])) {
+                        $message .= " - Checked out: " . $result['checked_out'] . " bookings";
+                    }
+                    redirect_with_message('settings.php', $message, 'success');
+                } catch (Exception $e) {
+                    $error = 'Auto checkout test failed: ' . $e->getMessage();
+                }
+                break;
+                
             case 'update_auto_checkout':
                 $autoCheckoutTime = $_POST['auto_checkout_time'] ?? '10:00';
                 $autoCheckoutEnabled = isset($_POST['auto_checkout_enabled']) ? '1' : '0';
@@ -148,10 +178,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 try {
                     $stmt = $pdo->prepare("
                         INSERT INTO system_settings (setting_key, setting_value) 
-                        VALUES ('auto_checkout_time', ?), ('auto_checkout_enabled', ?)
+                        VALUES ('auto_checkout_time', ?), ('auto_checkout_enabled', ?), ('default_checkout_time', ?)
                         ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)
                     ");
-                    $stmt->execute([$autoCheckoutTime, $autoCheckoutEnabled]);
+                    $stmt->execute([$autoCheckoutTime, $autoCheckoutEnabled, $autoCheckoutTime]);
+                    
+                    // Update all future bookings to use new default time
+                    $stmt = $pdo->prepare("
+                        UPDATE bookings 
+                        SET default_checkout_time = ? 
+                        WHERE status IN ('BOOKED', 'PENDING', 'ADVANCED_BOOKED')
+                    ");
+                    $stmt->execute([$autoCheckoutTime . ':00']);
+                    
                     redirect_with_message('settings.php', 'Auto checkout settings updated successfully!', 'success');
                 } catch (Exception $e) {
                     $error = 'Failed to update auto checkout settings.';
@@ -321,7 +360,11 @@ $flash = get_flash_message();
         
         <!-- Auto Checkout Settings -->
         <div class="form-container">
-            <h3>Auto Checkout Configuration</h3>
+            <h3>🕙 Auto Checkout Master Control (Owner Only)</h3>
+            <div style="background: linear-gradient(45deg, #007bff, #0056b3); color: white; padding: 1rem; border-radius: 8px; margin-bottom: 1rem;">
+                <h4 style="margin: 0; color: white;">⚠️ OWNER EXCLUSIVE CONTROLS</h4>
+                <p style="margin: 0.5rem 0 0 0; opacity: 0.9;">Only the owner can modify auto checkout settings. Admins can only view status.</p>
+            </div>
             <?php
             // Get auto checkout settings
             $stmt = $pdo->query("SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('auto_checkout_enabled', 'auto_checkout_time')");
@@ -332,6 +375,22 @@ $flash = get_flash_message();
             $autoEnabled = ($autoSettings['auto_checkout_enabled'] ?? '1') === '1';
             $autoTime = $autoSettings['auto_checkout_time'] ?? '10:00';
             ?>
+            
+            <!-- Testing Mode Controls -->
+            <div style="background: rgba(255, 193, 7, 0.1); padding: 1rem; border-radius: 8px; margin-bottom: 1rem; border: 2px solid var(--warning-color);">
+                <h4 style="color: var(--warning-color); margin-bottom: 0.5rem;">🧪 Testing Mode Controls</h4>
+                <form method="POST" style="display: inline-block; margin-right: 1rem;">
+                    <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
+                    <input type="hidden" name="action" value="enable_testing">
+                    <button type="submit" class="btn btn-warning">Enable Testing Mode</button>
+                </form>
+                <form method="POST" style="display: inline-block; margin-right: 1rem;">
+                    <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
+                    <input type="hidden" name="action" value="test_auto_checkout">
+                    <button type="submit" class="btn btn-success" onclick="return confirm('Test auto checkout now?')">🧪 Test Auto Checkout Now</button>
+                </form>
+                <a href="../admin/auto_checkout_logs.php" class="btn btn-outline">📋 View Logs</a>
+            </div>
             
             <form method="POST">
                 <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
@@ -349,7 +408,10 @@ $flash = get_flash_message();
                     <label for="auto_checkout_time" class="form-label">Daily Checkout Time</label>
                     <input type="time" id="auto_checkout_time" name="auto_checkout_time" class="form-control" 
                            value="<?= htmlspecialchars($autoTime) ?>" required>
-                    <small style="color: var(--dark-color);">Time when auto checkout will run daily (24-hour format)</small>
+                    <small style="color: var(--dark-color);">Time when auto checkout will run daily (24-hour format) - Default: 10:00 AM</small>
+                    <div style="margin-top: 0.5rem; padding: 0.5rem; background: rgba(16, 185, 129, 0.1); border-radius: 4px;">
+                        <strong>Current Time:</strong> <?= date('H:i') ?> | <strong>Next Auto Checkout:</strong> Tomorrow at <?= $autoTime ?>
+                    </div>
                 </div>
                 
                 <button type="submit" class="btn btn-primary">Update Auto Checkout Settings</button>
@@ -361,8 +423,11 @@ $flash = get_flash_message();
                 <p><strong>Daily Time:</strong> <?= $autoTime ?></p>
                 <p><strong>Next Run:</strong> Tomorrow at <?= $autoTime ?></p>
                 <p><strong>Payment Mode:</strong> Manual - Admin marks payments after checkout</p>
-                <a href="../admin/auto_checkout_settings.php" class="btn btn-outline">View Detailed Settings</a>
-                <a href="../admin/manual_checkout_test.php" class="btn btn-warning">Manual Test Page</a>
+                <p><strong>Default Checkout Time:</strong> All new bookings default to 10:00 AM checkout</p>
+                <div style="margin-top: 1rem;">
+                    <a href="../admin/auto_checkout_logs.php" class="btn btn-outline">📋 View Checkout Logs</a>
+                    <a href="../cron/auto_checkout_cron.php?manual_run=1" target="_blank" class="btn btn-warning">🔧 Test Cron Direct</a>
+                </div>
             </div>
         </div>
         

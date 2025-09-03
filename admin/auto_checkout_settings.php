@@ -2,7 +2,12 @@
 require_once '../includes/functions.php';
 require_once '../config/database.php';
 
-require_role('ADMIN');
+// Redirect admins to owner settings - only owner can modify auto checkout
+if ($_SESSION['role'] === 'ADMIN') {
+    redirect_with_message('../grid.php', 'Only owner can modify auto checkout settings. Contact owner for changes.', 'error');
+}
+
+require_role('OWNER');
 
 $database = new Database();
 $pdo = $database->getConnection();
