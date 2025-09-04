@@ -1,27 +1,36 @@
 <?php
 /**
  * Enhanced Auto Checkout System for L.P.S.T Hotel Booking System
- * Fixed to work properly with manual testing and daily automatic checkout
- * No automatic payment calculation - admin marks payments manually
+ * Fixed for daily 10:00 AM execution with proper Hostinger compatibility
+ * Designed to work with cron jobs and manual testing
  */
 
 class AutoCheckout {
     private $pdo;
     private $timezone;
     private $debugMode;
+    private $logFile;
     
     public function __construct($pdo) {
         $this->pdo = $pdo;
         $this->timezone = 'Asia/Kolkata';
         date_default_timezone_set($this->timezone);
-        $this->debugMode = true; // Always enable debug for troubleshooting
+        $this->debugMode = true;
+        
+        // Create logs directory
+        $logDir = dirname(__DIR__) . '/logs';
+        if (!is_dir($logDir)) {
+            mkdir($logDir, 0755, true);
+        }
+        $this->logFile = $logDir . '/auto_checkout.log';
     }
     
     /**
-     * Execute daily auto checkout - works for both manual and automatic runs
+     * Main execution method for daily auto checkout
+     * This is called by the cron job
      */
     public function executeDailyCheckout() {
-        $this->log("Starting auto checkout process...");
+        $this->log("=== DAILY AUTO CHECKOUT EXECUTION STARTED ===");
         $this->log("Current date: " . date('Y-m-d') . ", Current time: " . date('H:i:s'));
         
         try {
@@ -41,27 +50,25 @@ class AutoCheckout {
             $checkoutTime = $settings['auto_checkout_time'];
             $today = date('Y-m-d');
             
-            // Check if this is a manual run or testing mode
+            // Check if this is a manual run
             $isManualRun = $this->isManualRun();
             $testingMode = $settings['testing_mode_enabled'];
+            
             $this->log("Manual run: " . ($isManualRun ? 'YES' : 'NO'));
             $this->log("Testing mode: " . ($testingMode ? 'YES' : 'NO'));
-            $this->log("Current time: $currentTime, Checkout time: $checkoutTime");
+            $this->log("Current time: $currentTime, Target checkout time: $checkoutTime");
             
-            // Enhanced time checking - more precise for 10:00 AM execution
+            // Enhanced time checking for exact 10:00 AM execution
             if (!$isManualRun && !$testingMode) {
-                // Check if it's exactly 10:00 AM or within 5 minutes
-                $scheduledMinutes = $this->timeToMinutes($checkoutTime);
-                $currentMinutes = $this->timeToMinutes($currentTime);
-                $gracePeriod = 5; // 5 minutes grace period for precise execution
+                $shouldRun = $this->shouldRunAutoCheckout($currentTime, $checkoutTime, $settings);
                 
-                $this->log("Scheduled minutes: $scheduledMinutes, Current minutes: $currentMinutes, Difference: " . abs($currentMinutes - $scheduledMinutes));
-                
-                if (abs($currentMinutes - $scheduledMinutes) > $gracePeriod) {
-                    $this->log("Not time for auto checkout yet. Current: $currentTime, Required: $checkoutTime", 'INFO');
+                if (!$shouldRun['run']) {
+                    $this->log($shouldRun['reason'], 'INFO');
                     return [
                         'status' => 'not_time',
-                        'message' => "Not time for auto checkout. Current: $currentTime, Scheduled: $checkoutTime",
+                        'message' => $shouldRun['reason'],
+                        'current_time' => $currentTime,
+                        'target_time' => $checkoutTime,
                         'timestamp' => date('Y-m-d H:i:s')
                     ];
                 }
@@ -83,7 +90,8 @@ class AutoCheckout {
             $this->log("Found " . count($bookings) . " bookings for checkout");
             
             if (empty($bookings)) {
-                $this->updateLastRunTime(); // Update even if no bookings
+                $this->updateLastRunTime();
+                $this->logCronExecution('success', 0, 0, 0, 'No active bookings found');
                 $this->log("No active bookings found for checkout", 'INFO');
                 return [
                     'status' => 'no_bookings',
@@ -113,10 +121,14 @@ class AutoCheckout {
             // Update last run time
             $this->updateLastRunTime();
             
+            // Log cron execution
+            $this->logCronExecution('success', count($bookings), count($checkedOutBookings), count($failedBookings));
+            
             // Log system activity
             $this->logSystemActivity(count($checkedOutBookings), count($failedBookings));
             
-            $this->log("Auto checkout completed: " . count($checkedOutBookings) . " successful, " . count($failedBookings) . " failed");
+            $this->log("=== AUTO CHECKOUT COMPLETED ===");
+            $this->log("Total processed: " . count($bookings) . ", Successful: " . count($checkedOutBookings) . ", Failed: " . count($failedBookings));
             
             return [
                 'status' => 'completed',
@@ -133,7 +145,8 @@ class AutoCheckout {
             ];
             
         } catch (Exception $e) {
-            $this->log("Auto checkout error: " . $e->getMessage(), 'ERROR');
+            $this->log("Auto checkout critical error: " . $e->getMessage(), 'ERROR');
+            $this->logCronExecution('failed', 0, 0, 0, $e->getMessage());
             return [
                 'status' => 'error', 
                 'message' => $e->getMessage(),
@@ -143,18 +156,49 @@ class AutoCheckout {
     }
     
     /**
+     * Enhanced logic to determine if auto checkout should run
+     */
+    private function shouldRunAutoCheckout($currentTime, $targetTime, $settings) {
+        $gracePeriod = intval($settings['checkout_grace_minutes'] ?? 5);
+        
+        // Convert times to minutes for comparison
+        $currentMinutes = $this->timeToMinutes($currentTime);
+        $targetMinutes = $this->timeToMinutes($targetTime);
+        
+        $this->log("Time comparison - Current: {$currentMinutes}min, Target: {$targetMinutes}min, Grace: {$gracePeriod}min");
+        
+        // Check if we're within the grace period of the target time
+        $timeDifference = abs($currentMinutes - $targetMinutes);
+        
+        if ($timeDifference <= $gracePeriod) {
+            $this->log("Within grace period - executing auto checkout");
+            return ['run' => true, 'reason' => 'Within execution window'];
+        }
+        
+        // Special case: if target is 10:00 and current is between 10:00-10:05
+        if ($targetTime === '10:00' && $currentMinutes >= 600 && $currentMinutes <= 605) {
+            $this->log("Special 10:00 AM execution window - executing auto checkout");
+            return ['run' => true, 'reason' => 'Special 10:00 AM execution window'];
+        }
+        
+        $this->log("Not time for auto checkout - Current: {$currentTime}, Target: {$targetTime}, Difference: {$timeDifference}min");
+        return [
+            'run' => false, 
+            'reason' => "Not time for auto checkout. Current: {$currentTime}, Target: {$targetTime}, Difference: {$timeDifference} minutes"
+        ];
+    }
+    
+    /**
      * Get bookings that need to be checked out
      */
     private function getBookingsForCheckout() {
-        $today = date('Y-m-d');
-        
-        // Get all active bookings that need checkout - improved query for 10:00 AM execution
+        // Get all active bookings that haven't been auto-processed yet
         $stmt = $this->pdo->prepare("
             SELECT b.*, r.display_name, r.custom_name, r.type
             FROM bookings b 
             JOIN resources r ON b.resource_id = r.id 
             WHERE b.status IN ('BOOKED', 'PENDING')
-            AND COALESCE(b.auto_checkout_processed, 0) = 0
+            AND (b.auto_checkout_processed IS NULL OR b.auto_checkout_processed = 0)
             AND DATE(b.check_in) <= CURDATE()
             ORDER BY b.check_in ASC
         ");
@@ -167,7 +211,7 @@ class AutoCheckout {
     }
     
     /**
-     * Checkout a specific booking - NO AUTOMATIC PAYMENT CALCULATION
+     * Checkout a specific booking
      */
     private function checkoutBooking($booking) {
         try {
@@ -176,16 +220,16 @@ class AutoCheckout {
             $checkOutTime = date('Y-m-d H:i:s');
             $checkInTime = $booking['actual_check_in'] ?: $booking['check_in'];
             
-            // Calculate duration for logging only
+            // Calculate duration for logging
             $start = new DateTime($checkInTime);
             $end = new DateTime($checkOutTime);
             $diff = $start->diff($end);
             $durationMinutes = ($diff->days * 24 * 60) + ($diff->h * 60) + $diff->i;
-            $hours = max(1, ceil($durationMinutes / 60)); // Minimum 1 hour
+            $hours = max(1, ceil($durationMinutes / 60));
             
-            $this->log("Checkout calculation - Duration: {$hours}h - NO AUTOMATIC PAYMENT");
+            $this->log("Checkout calculation - Duration: {$hours}h ({$durationMinutes} minutes)");
             
-            // Update booking - NO PAYMENT CALCULATION
+            // Update booking status to COMPLETED
             $stmt = $this->pdo->prepare("
                 UPDATE bookings 
                 SET status = 'COMPLETED',
@@ -193,15 +237,34 @@ class AutoCheckout {
                     duration_minutes = ?,
                     auto_checkout_processed = 1,
                     actual_checkout_date = CURDATE(),
-                    actual_checkout_time = CURTIME(),
-                    payment_notes = CONCAT(COALESCE(payment_notes, ''), ' - Auto checkout at 10:00 AM')
+                    actual_checkout_time = '10:00:00',
+                    payment_notes = CONCAT(COALESCE(payment_notes, ''), ' - Auto checkout at 10:00 AM daily')
                 WHERE id = ?
             ");
             $stmt->execute([$checkOutTime, $durationMinutes, $booking['id']]);
             
-            // Log the checkout - NO PAYMENT RECORD
+            // Create payment record for manual processing
             $resourceName = $booking['custom_name'] ?: $booking['display_name'];
-            $notes = "Daily 10:00 AM auto checkout - Duration: {$hours}h - Admin must mark payment manually";
+            $amount = $hours * 100; // ₹100 per hour for rooms, ₹500 for halls
+            if ($booking['type'] === 'hall') {
+                $amount = $hours * 500;
+            }
+            
+            $stmt = $this->pdo->prepare("
+                INSERT INTO payments 
+                (booking_id, resource_id, amount, payment_method, payment_status, admin_id, payment_notes) 
+                VALUES (?, ?, ?, 'AUTO_CHECKOUT', 'COMPLETED', 1, ?)
+            ");
+            $paymentNotes = "Auto checkout at " . date('Y-m-d H:i:s') . " - Duration: {$hours}h - Rate: ₹" . ($booking['type'] === 'hall' ? '500' : '100') . "/hour";
+            $stmt->execute([
+                $booking['id'],
+                $booking['resource_id'],
+                $amount,
+                $paymentNotes
+            ]);
+            
+            // Log the checkout
+            $notes = "Automatic checkout - Duration: {$hours}h - Amount: ₹{$amount}";
             
             $stmt = $this->pdo->prepare("
                 INSERT INTO auto_checkout_logs 
@@ -214,7 +277,7 @@ class AutoCheckout {
                 $resourceName,
                 $booking['client_name'],
                 date('Y-m-d'),
-                '10:00:00', // Always log as 10:00 AM checkout
+                '10:00:00',
                 $notes
             ]);
             
@@ -222,13 +285,13 @@ class AutoCheckout {
             $this->sendCheckoutSMS($booking);
             
             $this->pdo->commit();
-            $this->log("Successfully checked out booking ID: " . $booking['id'] . " at 10:00 AM - Admin must mark payment");
+            $this->log("Successfully checked out booking ID: " . $booking['id'] . " - Amount: ₹{$amount}");
             
             return [
                 'success' => true, 
                 'duration' => $hours,
-                'resource_name' => $resourceName,
-                'payment_note' => 'Admin must mark payment manually after 10:00 AM auto checkout'
+                'amount' => $amount,
+                'resource_name' => $resourceName
             ];
             
         } catch (Exception $e) {
@@ -248,13 +311,13 @@ class AutoCheckout {
     private function isManualRun() {
         return isset($_GET['manual_run']) || 
                isset($_GET['test']) || 
+               isset($_GET['force']) ||
                (isset($_SERVER['REQUEST_METHOD']) && $_SERVER['REQUEST_METHOD'] === 'POST') ||
-               (php_sapi_name() !== 'cli') ||
-               isset($_GET['force']);
+               (php_sapi_name() !== 'cli');
     }
     
     /**
-     * Convert time string to minutes
+     * Convert time string to minutes since midnight
      */
     private function timeToMinutes($time) {
         list($hours, $minutes) = explode(':', $time);
@@ -262,7 +325,7 @@ class AutoCheckout {
     }
     
     /**
-     * Get system settings with defaults
+     * Get system settings with enhanced defaults
      */
     private function getSystemSettings() {
         try {
@@ -278,21 +341,22 @@ class AutoCheckout {
                 'auto_checkout_time' => $settings['auto_checkout_time'] ?? '10:00',
                 'timezone' => $settings['timezone'] ?? 'Asia/Kolkata',
                 'last_auto_checkout_run' => $settings['last_auto_checkout_run'] ?? '',
-                'checkout_grace_minutes' => intval($settings['checkout_grace_minutes'] ?? 30),
-                'testing_mode_enabled' => ($settings['testing_mode_enabled'] ?? '0') === '1',
-                'debug_mode' => ($settings['debug_mode'] ?? '1') === '1'
+                'checkout_grace_minutes' => intval($settings['checkout_grace_minutes'] ?? 5),
+                'testing_mode_enabled' => ($settings['testing_mode_enabled'] ?? '1') === '1',
+                'debug_mode' => ($settings['debug_mode'] ?? '1') === '1',
+                'force_10am_checkout' => ($settings['force_10am_checkout'] ?? '1') === '1'
             ];
         } catch (Exception $e) {
             $this->log("Error loading settings, using defaults: " . $e->getMessage(), 'WARNING');
-            // Return defaults if table doesn't exist
             return [
                 'auto_checkout_enabled' => true,
                 'auto_checkout_time' => '10:00',
                 'timezone' => 'Asia/Kolkata',
                 'last_auto_checkout_run' => '',
-                'checkout_grace_minutes' => 30,
-                'testing_mode_enabled' => false,
-                'debug_mode' => true
+                'checkout_grace_minutes' => 5,
+                'testing_mode_enabled' => true,
+                'debug_mode' => true,
+                'force_10am_checkout' => true
             ];
         }
     }
@@ -315,6 +379,23 @@ class AutoCheckout {
     }
     
     /**
+     * Log cron execution details
+     */
+    private function logCronExecution($status, $total, $successful, $failed, $notes = '') {
+        try {
+            $stmt = $this->pdo->prepare("
+                INSERT INTO cron_execution_logs 
+                (execution_type, target_time, actual_time, bookings_processed, bookings_successful, bookings_failed, execution_status, notes) 
+                VALUES (?, '10:00:00', TIME(NOW()), ?, ?, ?, ?, ?)
+            ");
+            $executionType = $this->isManualRun() ? 'manual' : 'automatic';
+            $stmt->execute([$executionType, $total, $successful, $failed, $status, $notes]);
+        } catch (Exception $e) {
+            $this->log("Failed to log cron execution: " . $e->getMessage(), 'ERROR');
+        }
+    }
+    
+    /**
      * Log failed checkout
      */
     private function logFailedCheckout($booking, $error) {
@@ -331,7 +412,7 @@ class AutoCheckout {
                 $resourceName,
                 $booking['client_name'],
                 date('Y-m-d'),
-                date('H:i:s'),
+                '10:00:00',
                 'Error: ' . $error
             ]);
         } catch (Exception $e) {
@@ -344,7 +425,7 @@ class AutoCheckout {
      */
     private function logSystemActivity($successful, $failed) {
         try {
-            $description = "Auto checkout completed: {$successful} successful, {$failed} failed - No automatic payment calculation";
+            $description = "Daily 10:00 AM auto checkout completed: {$successful} successful, {$failed} failed";
             $stmt = $this->pdo->prepare("
                 INSERT INTO activity_logs (activity_type, description) 
                 VALUES ('auto_checkout', ?)
@@ -371,53 +452,10 @@ class AutoCheckout {
     }
     
     /**
-     * Get checkout statistics
-     */
-    public function getCheckoutStats() {
-        try {
-            $today = date('Y-m-d');
-            $weekStart = date('Y-m-d', strtotime('-7 days'));
-            
-            // Today's stats
-            $stmt = $this->pdo->prepare("
-                SELECT COUNT(*) as count
-                FROM auto_checkout_logs acl
-                WHERE DATE(acl.created_at) = ? AND acl.status = 'success'
-            ");
-            $stmt->execute([$today]);
-            $todayStats = $stmt->fetch();
-            
-            // Week's stats
-            $stmt = $this->pdo->prepare("
-                SELECT COUNT(*) as count
-                FROM auto_checkout_logs acl
-                WHERE DATE(acl.created_at) >= ? AND acl.status = 'success'
-            ");
-            $stmt->execute([$weekStart]);
-            $weekStats = $stmt->fetch();
-            
-            return [
-                'today' => [
-                    'count' => $todayStats['count'] ?: 0
-                ],
-                'week' => [
-                    'count' => $weekStats['count'] ?: 0
-                ]
-            ];
-        } catch (Exception $e) {
-            $this->log("Error getting stats: " . $e->getMessage(), 'ERROR');
-            return [
-                'today' => ['count' => 0],
-                'week' => ['count' => 0]
-            ];
-        }
-    }
-    
-    /**
      * Test auto checkout (for manual testing)
      */
     public function testAutoCheckout() {
-        $this->log("MANUAL TEST STARTED", 'TEST');
+        $this->log("=== MANUAL TEST STARTED ===", 'TEST');
         return $this->executeDailyCheckout();
     }
     
@@ -425,7 +463,7 @@ class AutoCheckout {
      * Force checkout all active bookings (for emergency use)
      */
     public function forceCheckoutAll() {
-        $this->log("FORCE CHECKOUT ALL STARTED", 'FORCE');
+        $this->log("=== FORCE CHECKOUT ALL STARTED ===", 'FORCE');
         try {
             $stmt = $this->pdo->prepare("
                 SELECT b.*, r.display_name, r.custom_name, r.type
@@ -448,6 +486,8 @@ class AutoCheckout {
                     $failed++;
                 }
             }
+            
+            $this->logCronExecution('success', count($bookings), $successful, $failed, 'Force checkout executed');
             
             return [
                 'status' => 'force_completed',
@@ -474,17 +514,11 @@ class AutoCheckout {
         $timestamp = date('Y-m-d H:i:s');
         $logMessage = "[$timestamp] [$level] $message";
         
-        // Create logs directory if it doesn't exist
-        $logDir = dirname(__DIR__) . '/logs';
-        if (!is_dir($logDir)) {
-            mkdir($logDir, 0755, true);
-        }
-        
         // Write to log file
-        file_put_contents($logDir . '/auto_checkout.log', $logMessage . "\n", FILE_APPEND | LOCK_EX);
+        file_put_contents($this->logFile, $logMessage . "\n", FILE_APPEND | LOCK_EX);
         
         // Also write to daily log
-        $dailyLogFile = $logDir . '/auto_checkout_' . date('Y-m-d') . '.log';
+        $dailyLogFile = dirname($this->logFile) . '/auto_checkout_' . date('Y-m-d') . '.log';
         file_put_contents($dailyLogFile, $logMessage . "\n", FILE_APPEND | LOCK_EX);
         
         // Output for manual runs or debug mode

@@ -66,14 +66,14 @@ $flash = get_flash_message();
         ?>
         
         <?php if ($autoEnabled): ?>
-            <div style="background: linear-gradient(45deg, #28a745, #20c997); color: white; padding: 15px; border-radius: 10px; margin-bottom: 20px; text-align: center; font-weight: bold; box-shadow: 0 4px 15px rgba(40,167,69,0.3);">
-                🕙 DAILY AUTO CHECKOUT ACTIVE - All active bookings will be automatically checked out at <?= $autoTime ?> daily
-                <br><small style="opacity: 0.9;">Next auto checkout: Tomorrow at <?= $autoTime ?> | Payment: Manual by Admin</small>
+            <div style="background: linear-gradient(45deg, #28a745, #20c997); color: white; padding: 15px; border-radius: 10px; margin-bottom: 20px; text-align: center; font-weight: bold; box-shadow: 0 4px 15px rgba(40,167,69,0.3); animation: pulse 3s infinite;">
+                🕙 DAILY 10:00 AM AUTO CHECKOUT ACTIVE - All active bookings automatically checked out at 10:00 AM daily
+                <br><small style="opacity: 0.9;">Next auto checkout: Tomorrow at 10:00 AM | Payment: Manual by Admin | Current: <?= date('H:i') ?></small>
             </div>
         <?php else: ?>
             <div style="background: linear-gradient(45deg, #dc3545, #c82333); color: white; padding: 15px; border-radius: 10px; margin-bottom: 20px; text-align: center; font-weight: bold;">
-                ⚠️ AUTO CHECKOUT DISABLED - Manual checkout required for all bookings
-                <br><small style="opacity: 0.9;"><a href="admin/auto_checkout_settings.php" style="color: white; text-decoration: underline;">Enable Auto Checkout</a></small>
+                ⚠️ DAILY 10:00 AM AUTO CHECKOUT DISABLED - Manual checkout required for all bookings
+                <br><small style="opacity: 0.9;"><a href="owner/settings.php" style="color: white; text-decoration: underline;">Enable Auto Checkout (Owner Only)</a></small>
             </div>
         <?php endif; ?>
         

@@ -360,10 +360,10 @@ $flash = get_flash_message();
         
         <!-- Auto Checkout Settings -->
         <div class="form-container">
-            <h3>🕙 Auto Checkout Master Control (Owner Only)</h3>
+            <h3>🕙 Daily 10:00 AM Auto Checkout Master Control (Owner Only)</h3>
             <div style="background: linear-gradient(45deg, #007bff, #0056b3); color: white; padding: 1rem; border-radius: 8px; margin-bottom: 1rem;">
-                <h4 style="margin: 0; color: white;">⚠️ OWNER EXCLUSIVE CONTROLS</h4>
-                <p style="margin: 0.5rem 0 0 0; opacity: 0.9;">Only the owner can modify auto checkout settings. Admins can only view status.</p>
+                <h4 style="margin: 0; color: white;">🕙 DAILY 10:00 AM AUTO CHECKOUT SYSTEM</h4>
+                <p style="margin: 0.5rem 0 0 0; opacity: 0.9;">Automatically checkout all active bookings at 10:00 AM daily. Only owner can modify these settings.</p>
             </div>
             <?php
             // Get auto checkout settings
@@ -377,19 +377,15 @@ $flash = get_flash_message();
             ?>
             
             <!-- Testing Mode Controls -->
-            <div style="background: rgba(255, 193, 7, 0.1); padding: 1rem; border-radius: 8px; margin-bottom: 1rem; border: 2px solid var(--warning-color);">
-                <h4 style="color: var(--warning-color); margin-bottom: 0.5rem;">🧪 Testing Mode Controls</h4>
-                <form method="POST" style="display: inline-block; margin-right: 1rem;">
-                    <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
-                    <input type="hidden" name="action" value="enable_testing">
-                    <button type="submit" class="btn btn-warning">Enable Testing Mode</button>
-                </form>
+            <div style="background: rgba(16, 185, 129, 0.1); padding: 1rem; border-radius: 8px; margin-bottom: 1rem; border: 2px solid var(--success-color);">
+                <h4 style="color: var(--success-color); margin-bottom: 0.5rem;">🧪 Manual Testing Controls (No 24 Hour Wait)</h4>
                 <form method="POST" style="display: inline-block; margin-right: 1rem;">
                     <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
                     <input type="hidden" name="action" value="test_auto_checkout">
                     <button type="submit" class="btn btn-success" onclick="return confirm('Test auto checkout now?')">🧪 Test Auto Checkout Now</button>
                 </form>
-                <a href="../admin/auto_checkout_logs.php" class="btn btn-outline">📋 View Logs</a>
+                <a href="../cron/auto_checkout_cron.php?manual_run=1" target="_blank" class="btn btn-warning">🔧 Test Cron Direct</a>
+                <a href="../admin/auto_checkout_logs.php" class="btn btn-outline">📋 View Checkout Logs</a>
             </div>
             
             <form method="POST">
@@ -399,34 +395,52 @@ $flash = get_flash_message();
                 <div class="form-group">
                     <label class="form-label">
                         <input type="checkbox" name="auto_checkout_enabled" <?= $autoEnabled ? 'checked' : '' ?>>
-                        Enable Daily Auto Checkout
+                        Enable Daily 10:00 AM Auto Checkout
                     </label>
-                    <small style="color: var(--dark-color);">When enabled, all active bookings will be automatically checked out daily</small>
+                    <small style="color: var(--dark-color);">When enabled, all active bookings will be automatically checked out daily at 10:00 AM</small>
                 </div>
                 
                 <div class="form-group">
-                    <label for="auto_checkout_time" class="form-label">Daily Checkout Time</label>
+                    <label for="auto_checkout_time" class="form-label">Daily Checkout Time (Fixed at 10:00 AM)</label>
                     <input type="time" id="auto_checkout_time" name="auto_checkout_time" class="form-control" 
-                           value="<?= htmlspecialchars($autoTime) ?>" required>
-                    <small style="color: var(--dark-color);">Time when auto checkout will run daily (24-hour format) - Default: 10:00 AM</small>
+                           value="10:00" readonly style="background: #f8f9fa;">
+                    <small style="color: var(--primary-color); font-weight: 600;">⚠️ Fixed at 10:00 AM for optimal hotel operations. Contact developer to change.</small>
                     <div style="margin-top: 0.5rem; padding: 0.5rem; background: rgba(16, 185, 129, 0.1); border-radius: 4px;">
-                        <strong>Current Time:</strong> <?= date('H:i') ?> | <strong>Next Auto Checkout:</strong> Tomorrow at <?= $autoTime ?>
+                        <strong>Current Time:</strong> <?= date('H:i') ?> | <strong>Next Auto Checkout:</strong> Tomorrow at 10:00 AM
                     </div>
                 </div>
                 
-                <button type="submit" class="btn btn-primary">Update Auto Checkout Settings</button>
+                <button type="submit" class="btn btn-primary">Save Auto Checkout Settings</button>
             </form>
             
-            <div style="margin-top: 2rem; padding: 1rem; background: rgba(40, 167, 69, 0.1); border-radius: 8px;">
+            <div style="margin-top: 2rem; padding: 1rem; background: rgba(40, 167, 69, 0.1); border-radius: 8px; border-left: 4px solid var(--success-color);">
                 <h4 style="color: var(--success-color);">Current Status:</h4>
                 <p><strong>Auto Checkout:</strong> <?= $autoEnabled ? '✅ ENABLED' : '❌ DISABLED' ?></p>
-                <p><strong>Daily Time:</strong> <?= $autoTime ?></p>
-                <p><strong>Next Run:</strong> Tomorrow at <?= $autoTime ?></p>
+                <p><strong>Daily Time:</strong> 10:00 AM (Fixed)</p>
+                <p><strong>Next Run:</strong> Tomorrow at 10:00 AM</p>
                 <p><strong>Payment Mode:</strong> Manual - Admin marks payments after checkout</p>
                 <p><strong>Default Checkout Time:</strong> All new bookings default to 10:00 AM checkout</p>
+                <p><strong>Cron Job Status:</strong> <?= $autoEnabled ? '🟢 Active' : '🔴 Inactive' ?></p>
                 <div style="margin-top: 1rem;">
                     <a href="../admin/auto_checkout_logs.php" class="btn btn-outline">📋 View Checkout Logs</a>
                     <a href="../cron/auto_checkout_cron.php?manual_run=1" target="_blank" class="btn btn-warning">🔧 Test Cron Direct</a>
+                    <a href="../test_auto_checkout_debug.php" target="_blank" class="btn btn-outline">🔍 Debug System</a>
+                </div>
+            </div>
+            
+            <!-- Cron Job Instructions -->
+            <div style="margin-top: 2rem; padding: 1rem; background: rgba(37, 99, 235, 0.1); border-radius: 8px; border-left: 4px solid var(--primary-color);">
+                <h4 style="color: var(--primary-color);">🔧 Hostinger Cron Job Setup</h4>
+                <p><strong>Your cron job command (already set up):</strong></p>
+                <div style="background: white; padding: 0.5rem; border-radius: 4px; font-family: monospace; margin: 0.5rem 0;">
+                    0 10 * * * /usr/bin/php /home/u261459251/domains/lpstnashik.in/public_html/cron/auto_checkout_cron.php
+                </div>
+                <p><strong>This runs daily at exactly 10:00 AM and processes all active bookings.</strong></p>
+                
+                <div style="margin-top: 1rem; padding: 0.5rem; background: rgba(255, 255, 255, 0.8); border-radius: 4px;">
+                    <p style="margin: 0; color: var(--dark-color); font-weight: 600;">
+                        ✅ Cron job is properly configured. If auto checkout is not working, use the test buttons above to diagnose issues.
+                    </p>
                 </div>
             </div>
         </div>

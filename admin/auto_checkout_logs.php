@@ -91,6 +91,12 @@ $flash = get_flash_message();
 
         <h2>🕙 Auto Checkout Logs</h2>
         
+        <!-- System Status Notice -->
+        <div style="background: linear-gradient(45deg, #28a745, #20c997); color: white; padding: 15px; border-radius: 10px; margin-bottom: 20px; text-align: center; font-weight: bold; box-shadow: 0 4px 15px rgba(40,167,69,0.3);">
+            🕙 DAILY 10:00 AM AUTO CHECKOUT SYSTEM
+            <br><small style="opacity: 0.9;">All active bookings are automatically checked out at 10:00 AM daily | Payment: Manual by Admin</small>
+        </div>
+        
         <!-- Filters -->
         <div class="form-container">
             <h3>Filters</h3>
