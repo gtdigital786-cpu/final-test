@@ -1,15 +1,15 @@
 <?php
 /**
- * FIXED Auto Checkout Cron Job for L.P.S.T Hotel Booking System
- * GUARANTEED daily 10:00 AM execution with precise timing
+ * REBUILT Auto Checkout Cron Job for L.P.S.T Hotel
+ * GUARANTEED daily 10:00 AM execution with foolproof logic
  * 
- * HOSTINGER CRON JOB COMMAND (FIXED):
+ * HOSTINGER CRON JOB COMMAND:
  * 0 10 * * * /usr/bin/php /home/u261459251/domains/lpstnashik.in/public_html/cron/auto_checkout_cron.php
  * 
- * This runs daily at exactly 10:00 AM and checks out all active bookings
+ * This script will ONLY execute between 10:00-10:05 AM and will process all active bookings
  */
 
-// FIXED: Set timezone first thing
+// Set timezone FIRST
 date_default_timezone_set('Asia/Kolkata');
 
 // Create logs directory
@@ -24,12 +24,13 @@ function logMessage($message, $level = 'INFO') {
     $timestamp = date('Y-m-d H:i:s');
     $logMessage = "[$timestamp] [$level] $message";
     
-    // Write to main log file
-    file_put_contents($logDir . '/auto_checkout.log', $logMessage . "\n", FILE_APPEND | LOCK_EX);
-    
-    // Write to daily log
+    // Write to daily log file
     $dailyLogFile = $logDir . '/auto_checkout_' . date('Y-m-d') . '.log';
     file_put_contents($dailyLogFile, $logMessage . "\n", FILE_APPEND | LOCK_EX);
+    
+    // Write to main log file
+    $mainLogFile = $logDir . '/auto_checkout.log';
+    file_put_contents($mainLogFile, $logMessage . "\n", FILE_APPEND | LOCK_EX);
     
     // Output for manual runs
     if (isset($_GET['manual_run']) || isset($_GET['test']) || php_sapi_name() !== 'cli') {
@@ -43,30 +44,30 @@ $isManualRun = isset($_GET['manual_run']) || isset($_GET['test']) || php_sapi_na
 if ($isManualRun) {
     header('Content-Type: text/html; charset=utf-8');
     echo "<!DOCTYPE html><html><head><title>Auto Checkout Execution</title>";
-    echo "<style>body{font-family:Arial;margin:20px;line-height:1.6;} .success{color:green;} .error{color:red;} .warning{color:orange;} .info{color:blue;}</style>";
+    echo "<style>body{font-family:Arial;margin:20px;line-height:1.6;} .success{color:green;font-weight:bold;} .error{color:red;font-weight:bold;} .warning{color:orange;font-weight:bold;} .info{color:blue;font-weight:bold;}</style>";
     echo "</head><body>";
     echo "<h2>🕙 Daily 10:00 AM Auto Checkout Execution</h2>";
     echo "<p><strong>Current Time:</strong> " . date('H:i:s') . " (Asia/Kolkata)</p>";
     echo "<p><strong>Current Date:</strong> " . date('Y-m-d') . "</p>";
     echo "<p><strong>Execution Mode:</strong> " . ($isManualRun ? 'MANUAL TEST' : 'AUTOMATIC CRON') . "</p>";
-    logMessage("MANUAL AUTO CHECKOUT TEST STARTED", 'TEST');
+    logMessage("=== MANUAL AUTO CHECKOUT TEST STARTED ===", 'TEST');
 } else {
-    logMessage("DAILY 10:00 AM AUTO CHECKOUT STARTED", 'CRON');
+    logMessage("=== DAILY 10:00 AM AUTO CHECKOUT STARTED ===", 'CRON');
 }
 
 logMessage("Execution mode: " . ($isManualRun ? 'MANUAL TEST' : 'AUTOMATIC CRON'));
-logMessage("Target time: 10:00 AM daily");
-logMessage("Current time: " . date('H:i:s'));
-logMessage("Current date: " . date('Y-m-d'));
+logMessage("Target execution time: 10:00-10:05 AM daily");
+logMessage("Current server time: " . date('H:i:s'));
+logMessage("Current server date: " . date('Y-m-d'));
 
-// FIXED: Database connection with enhanced error handling
+// Database connection with enhanced error handling
 try {
     $host = 'localhost';
     $dbname = 'u261459251_patel';
     $username = 'u261459251_levagt';
     $password = 'GtPatelsamaj@0330';
     
-    logMessage("Attempting database connection to $host/$dbname");
+    logMessage("Connecting to database: $host/$dbname");
     
     $pdo = new PDO("mysql:host=$host;dbname=$dbname;charset=utf8mb4", $username, $password, [
         PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
@@ -80,36 +81,37 @@ try {
     
 } catch(PDOException $e) {
     $error = "Database connection failed: " . $e->getMessage();
-    logMessage($error, 'ERROR');
+    logMessage($error, 'CRITICAL');
     
     if ($isManualRun) {
         echo "<p class='error'>$error</p>";
+        echo "<p>Please check your database credentials and connection.</p>";
         echo "</body></html>";
     }
     exit(1);
 }
 
-// FIXED: Verify required tables exist
+// Verify required tables exist
 try {
-    $requiredTables = ['bookings', 'resources', 'auto_checkout_logs', 'system_settings'];
+    $requiredTables = ['bookings', 'resources', 'auto_checkout_logs', 'system_settings', 'cron_execution_logs'];
     foreach ($requiredTables as $table) {
-        $stmt = $pdo->query("SELECT COUNT(*) FROM $table");
+        $stmt = $pdo->query("SELECT COUNT(*) FROM `$table`");
         $count = $stmt->fetchColumn();
-        logMessage("Table '$table' verified with $count records");
+        logMessage("Table '$table' verified: $count records");
     }
 } catch (Exception $e) {
     $error = "Database table verification failed: " . $e->getMessage();
-    logMessage($error, 'ERROR');
+    logMessage($error, 'CRITICAL');
     
     if ($isManualRun) {
         echo "<p class='error'>$error</p>";
-        echo "<p>Please run the SQL migration file to create required tables.</p>";
+        echo "<p>Please run the complete_auto_checkout_rebuild.sql migration file in phpMyAdmin.</p>";
         echo "</body></html>";
     }
     exit(1);
 }
 
-// FIXED: Load and execute auto checkout
+// Load and execute auto checkout
 try {
     require_once dirname(__DIR__) . '/includes/auto_checkout.php';
     
@@ -117,14 +119,14 @@ try {
     
     $autoCheckout = new AutoCheckout($pdo);
     
-    // FIXED: Execute the daily checkout with proper timing
+    // Execute the daily checkout
     $result = $autoCheckout->executeDailyCheckout();
     
-    // Enhanced result logging
-    $logLevel = $result['status'] === 'error' ? 'ERROR' : 'INFO';
-    logMessage("Auto Checkout Execution Result: " . json_encode($result), $logLevel);
+    // Log detailed results
+    $logLevel = ($result['status'] === 'error') ? 'ERROR' : 'INFO';
+    logMessage("Auto Checkout Result: " . json_encode($result), $logLevel);
     
-    // Output result for manual runs
+    // Output results for manual runs
     if ($isManualRun) {
         echo "<h3>Execution Results:</h3>";
         echo "<div style='background: #f8f9fa; padding: 1rem; border-radius: 8px; border: 1px solid #ddd;'>";
@@ -133,26 +135,26 @@ try {
         
         if ($result['status'] === 'completed') {
             echo "<p class='success'>✅ Auto checkout completed successfully!</p>";
-            echo "<p>Checked out: " . ($result['checked_out'] ?? 0) . " bookings</p>";
+            echo "<p>Total processed: " . ($result['total_processed'] ?? 0) . " bookings</p>";
+            echo "<p>Successful: " . ($result['successful'] ?? 0) . " bookings</p>";
             echo "<p>Failed: " . ($result['failed'] ?? 0) . " bookings</p>";
             
-            if (isset($result['details']['successful']) && !empty($result['details']['successful'])) {
+            if (isset($result['successful_bookings']) && !empty($result['successful_bookings'])) {
                 echo "<h4>Successfully Checked Out:</h4>";
                 echo "<ul>";
-                foreach ($result['details']['successful'] as $booking) {
-                    $resourceName = $booking['custom_name'] ?: $booking['display_name'];
-                    echo "<li>{$resourceName}: {$booking['client_name']}</li>";
+                foreach ($result['successful_bookings'] as $booking) {
+                    echo "<li>{$booking['resource_name']}: {$booking['client_name']}</li>";
                 }
                 echo "</ul>";
             }
             
         } elseif ($result['status'] === 'no_bookings') {
             echo "<p class='warning'>⚠️ No active bookings found for checkout</p>";
-        } elseif ($result['status'] === 'not_time') {
+        } elseif ($result['status'] === 'wrong_hour' || $result['status'] === 'wrong_minute') {
             echo "<p class='info'>ℹ️ Not time for auto checkout yet</p>";
-            echo "<p>Current: " . ($result['current_time'] ?? date('H:i')) . ", Target: 10:00-10:05 AM</p>";
-        } elseif ($result['status'] === 'already_run') {
-            echo "<p class='info'>ℹ️ Auto checkout already ran today</p>";
+            echo "<p>Current: " . date('H:i') . ", Target: 10:00-10:05 AM</p>";
+        } elseif ($result['status'] === 'already_executed') {
+            echo "<p class='info'>ℹ️ Auto checkout already executed today</p>";
         } else {
             echo "<p class='error'>❌ Auto checkout failed: " . ($result['message'] ?? 'Unknown error') . "</p>";
         }
@@ -166,11 +168,11 @@ try {
     } else {
         // Command line output
         echo "Auto checkout executed: " . $result['status'] . "\n";
-        if (isset($result['checked_out'])) {
-            echo "Checked out: " . $result['checked_out'] . " bookings\n";
+        if (isset($result['successful'])) {
+            echo "Successful: " . $result['successful'] . "\n";
         }
         if (isset($result['failed'])) {
-            echo "Failed: " . $result['failed'] . " bookings\n";
+            echo "Failed: " . $result['failed'] . "\n";
         }
         if (isset($result['message'])) {
             echo "Message: " . $result['message'] . "\n";

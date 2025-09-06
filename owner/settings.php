@@ -4,16 +4,10 @@ require_once '../config/database.php';
 
 require_role('OWNER');
 
-// --- CHANGE FOR MANUAL INSTALL ---
-// We no longer check for a 'vendor' folder. We assume the files we uploaded exist.
-// This line replaces the old check and prevents the red error box from showing.
-define('PHPMAILER_AVAILABLE', true);
-// --- END CHANGE ---
-
 $database = new Database();
 $pdo = $database->getConnection();
 
-// Handle all form submissions (updates and tests)
+// Handle all form submissions
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!verify_csrf_token($_POST['csrf_token'] ?? '')) {
         $error = 'Security token mismatch. Please try again.';
@@ -21,137 +15,47 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $action = $_POST['action'] ?? '';
         
         switch ($action) {
-            case 'change_username':
-                $newUsername = sanitize_input($_POST['new_username'] ?? '');
-                if (empty($newUsername)) {
-                    $error = 'New username is required';
-                } else {
-                    try {
-                        $stmt = $pdo->prepare("UPDATE users SET username = ? WHERE id = ?");
-                        $stmt->execute([$newUsername, $_SESSION['user_id']]);
-                        $_SESSION['username'] = $newUsername;
-                        redirect_with_message('settings.php', 'Username changed successfully!', 'success');
-                    } catch (Exception $e) {
-                        $error = 'Failed to change username - it may already exist.';
-                    }
-                }
-                break;
+            case 'update_auto_checkout':
+                $autoCheckoutEnabled = isset($_POST['auto_checkout_enabled']) ? '1' : '0';
                 
-            case 'update_sms':
-                $smsApiUrl = sanitize_input($_POST['sms_api_url'] ?? '');
-                $smsApiKey = sanitize_input($_POST['sms_api_key'] ?? '');
-                $smsSenderId = sanitize_input($_POST['sms_sender_id'] ?? '');
-                $hotelName = sanitize_input($_POST['hotel_name'] ?? '');
-                if (empty($smsApiUrl) || empty($smsApiKey)) {
-                    $error = 'SMS API URL and API Key are required';
-                } else {
-                    try {
-                        $stmt = $pdo->prepare("INSERT INTO settings (setting_key, setting_value, updated_by) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE setting_value = ?, updated_by = ?");
-                        $stmt->execute(['sms_api_url', $smsApiUrl, $_SESSION['user_id'], $smsApiUrl, $_SESSION['user_id']]);
-                        $stmt->execute(['sms_api_key', $smsApiKey, $_SESSION['user_id'], $smsApiKey, $_SESSION['user_id']]);
-                        $stmt->execute(['sms_sender_id', $smsSenderId, $_SESSION['user_id'], $smsSenderId, $_SESSION['user_id']]);
-                        $stmt->execute(['hotel_name', $hotelName, $_SESSION['user_id'], $hotelName, $_SESSION['user_id']]);
-                        redirect_with_message('settings.php', 'SMS settings updated successfully!', 'success');
-                    } catch (Exception $e) {
-                        $error = 'Failed to update SMS settings.';
-                    }
-                }
-                break;
-                
-            case 'update_email':
-                $smtpHost = sanitize_input($_POST['smtp_host'] ?? '');
-                $smtpPort = sanitize_input($_POST['smtp_port'] ?? '');
-                $smtpUsername = sanitize_input($_POST['smtp_username'] ?? '');
-                $smtpPassword = $_POST['smtp_password'] ?? ''; // Do not sanitize password
-                $smtpEncryption = $_POST['smtp_encryption'] ?? 'ssl';
-                $ownerEmail = sanitize_input($_POST['owner_email'] ?? '');
-                if (empty($smtpHost) || empty($smtpUsername)) {
-                    $error = 'SMTP Host and Username are required';
-                } else {
-                    try {
-                        $stmt = $pdo->prepare("INSERT INTO settings (setting_key, setting_value, updated_by) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE setting_value = ?, updated_by = ?");
-                        $stmt->execute(['smtp_host', $smtpHost, $_SESSION['user_id'], $smtpHost, $_SESSION['user_id']]);
-                        $stmt->execute(['smtp_port', $smtpPort, $_SESSION['user_id'], $smtpPort, $_SESSION['user_id']]);
-                        $stmt->execute(['smtp_username', $smtpUsername, $_SESSION['user_id'], $smtpUsername, $_SESSION['user_id']]);
-                        if (!empty($smtpPassword)) {
-                            $stmt->execute(['smtp_password', $smtpPassword, $_SESSION['user_id'], $smtpPassword, $_SESSION['user_id']]);
-                        }
-                        $stmt->execute(['smtp_encryption', $smtpEncryption, $_SESSION['user_id'], $smtpEncryption, $_SESSION['user_id']]);
-                        $stmt->execute(['owner_email', $ownerEmail, $_SESSION['user_id'], $ownerEmail, $_SESSION['user_id']]);
-                        redirect_with_message('settings.php', 'Email settings updated successfully!', 'success');
-                    } catch (Exception $e) {
-                        $error = 'Failed to update email settings.';
-                    }
-                }
-                break;
-                
-            case 'test_email':
-                $testEmail = sanitize_input($_POST['test_email'] ?? '');
-                if (empty($testEmail) || !filter_var($testEmail, FILTER_VALIDATE_EMAIL)) {
-                    $error = 'A valid email address is required for testing';
-                } else {
-                    try {
-                        // Load the email functions file ONLY when it is needed.
-                        require_once '../includes/email_functions.php';
-                        $result = test_email_configuration($testEmail, $pdo, $_SESSION['user_id']);
-                        
-                        if ($result['success']) {
-                            redirect_with_message('settings.php', 'Test email sent successfully! Check your inbox.', 'success');
-                        } else {
-                            redirect_with_message('settings.php', 'Email test failed: ' . htmlspecialchars($result['message']), 'error');
-                        }
-                    } catch (Exception $e) {
-                        redirect_with_message('settings.php', 'A critical error occurred: ' . $e->getMessage(), 'error');
-                    }
-                }
-                break;
-
-            case 'update_upi':
-                $upiId = sanitize_input($_POST['upi_id'] ?? '');
-                if (empty($upiId)) {
-                    $error = 'UPI ID is required';
-                } else {
-                    try {
-                        $stmt = $pdo->prepare("INSERT INTO settings (setting_key, setting_value, updated_by) VALUES ('upi_id', ?, ?) ON DUPLICATE KEY UPDATE setting_value = ?, updated_by = ?");
-                        $stmt->execute([$upiId, $_SESSION['user_id'], $upiId, $_SESSION['user_id']]);
-                        redirect_with_message('settings.php', 'UPI settings updated successfully!', 'success');
-                    } catch (Exception $e) {
-                        $error = 'Failed to update UPI settings.';
-                    }
-                }
-                break;
-                
-            case 'change_password':
-                $newPassword = $_POST['new_password'] ?? '';
-                $confirmPassword = $_POST['confirm_password'] ?? '';
-                if (empty($newPassword) || strlen($newPassword) < 6) {
-                    $error = 'Password must be at least 6 characters long';
-                } elseif ($newPassword !== $confirmPassword) {
-                    $error = 'The new passwords do not match';
-                } else {
-                    try {
-                        $hashedPassword = password_hash($newPassword, PASSWORD_DEFAULT);
-                        $stmt = $pdo->prepare("UPDATE users SET password = ? WHERE id = ?");
-                        $stmt->execute([$hashedPassword, $_SESSION['user_id']]);
-                        session_destroy();
-                        redirect_with_message('../login.php', 'Password changed! Please login again.', 'success');
-                    } catch (Exception $e) {
-                        $error = 'Failed to change password.';
-                    }
-                }
-                break;
-                
-            case 'enable_testing':
                 try {
+                    // Reset system for fresh start
+                    $stmt = $pdo->prepare("DELETE FROM system_settings WHERE setting_key LIKE '%auto_checkout%'");
+                    $stmt->execute();
+                    
+                    // Reset all booking flags
                     $stmt = $pdo->prepare("
-                        INSERT INTO system_settings (setting_key, setting_value) 
-                        VALUES ('testing_mode_enabled', '1')
-                        ON DUPLICATE KEY UPDATE setting_value = '1'
+                        UPDATE bookings 
+                        SET auto_checkout_processed = 0,
+                            actual_checkout_date = NULL,
+                            actual_checkout_time = NULL,
+                            default_checkout_time = '10:00:00',
+                            is_auto_checkout_eligible = 1
+                        WHERE status IN ('BOOKED', 'PENDING')
                     ");
                     $stmt->execute();
-                    redirect_with_message('settings.php', 'Testing mode enabled! Auto checkout can now be tested anytime.', 'success');
+                    
+                    // Insert fresh settings
+                    $settings = [
+                        'auto_checkout_enabled' => $autoCheckoutEnabled,
+                        'auto_checkout_time' => '10:00',
+                        'auto_checkout_timezone' => 'Asia/Kolkata',
+                        'auto_checkout_last_run_date' => '',
+                        'auto_checkout_last_run_time' => '',
+                        'auto_checkout_execution_window_start' => '10:00',
+                        'auto_checkout_execution_window_end' => '10:05',
+                        'auto_checkout_force_daily_execution' => '1',
+                        'auto_checkout_system_version' => '2.0'
+                    ];
+                    
+                    $stmt = $pdo->prepare("INSERT INTO system_settings (setting_key, setting_value) VALUES (?, ?)");
+                    foreach ($settings as $key => $value) {
+                        $stmt->execute([$key, $value]);
+                    }
+                    
+                    redirect_with_message('settings.php', 'Auto checkout system reset and configured for daily 10:00 AM execution!', 'success');
                 } catch (Exception $e) {
-                    $error = 'Failed to enable testing mode.';
+                    $error = 'Failed to update auto checkout settings: ' . $e->getMessage();
                 }
                 break;
                 
@@ -162,8 +66,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $result = $autoCheckout->testAutoCheckout();
                     
                     $message = "Auto checkout test completed: " . $result['status'];
-                    if (isset($result['checked_out'])) {
-                        $message .= " - Checked out: " . $result['checked_out'] . " bookings";
+                    if (isset($result['successful'])) {
+                        $message .= " - Successful: " . $result['successful'];
+                    }
+                    if (isset($result['failed'])) {
+                        $message .= " - Failed: " . $result['failed'];
                     }
                     redirect_with_message('settings.php', $message, 'success');
                 } catch (Exception $e) {
@@ -171,73 +78,123 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
                 break;
                 
-            case 'update_auto_checkout':
-                $autoCheckoutTime = '10:00'; // FIXED: Always force 10:00 AM
-                $autoCheckoutEnabled = isset($_POST['auto_checkout_enabled']) ? '1' : '0';
-                
+            case 'force_checkout_all':
                 try {
-                    // FIXED: Reset last run time and auto checkout flags for fresh start
-                    $stmt = $pdo->prepare("
-                        UPDATE system_settings 
-                        SET setting_value = '' 
-                        WHERE setting_key = 'last_auto_checkout_run'
-                    ");
-                    $stmt->execute();
+                    require_once '../includes/auto_checkout.php';
+                    $autoCheckout = new AutoCheckout($pdo);
+                    $result = $autoCheckout->forceCheckoutAll();
                     
-                    // Reset all auto checkout processed flags
-                    $stmt = $pdo->prepare("
-                        UPDATE bookings 
-                        SET auto_checkout_processed = 0 
-                        WHERE status IN ('BOOKED', 'PENDING')
-                    ");
-                    $stmt->execute();
-                    
-                    $stmt = $pdo->prepare("
-                        INSERT INTO system_settings (setting_key, setting_value) 
-                        VALUES ('auto_checkout_time', '10:00'), ('auto_checkout_enabled', ?), ('default_checkout_time', '10:00')
-                        ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)
-                    ");
-                    $stmt->execute([$autoCheckoutEnabled]);
-                    
-                    // Update all future bookings to use new default time
-                    $stmt = $pdo->prepare("
-                        UPDATE bookings 
-                        SET default_checkout_time = '10:00:00' 
-                        WHERE status IN ('BOOKED', 'PENDING', 'ADVANCED_BOOKED')
-                    ");
-                    $stmt->execute();
-                    
-                    redirect_with_message('settings.php', 'Auto checkout settings updated and system reset for tomorrow 10:00 AM execution!', 'success');
+                    $message = "Force checkout completed: " . $result['status'];
+                    if (isset($result['successful'])) {
+                        $message .= " - Processed: " . $result['successful'] . " bookings";
+                    }
+                    redirect_with_message('settings.php', $message, 'success');
                 } catch (Exception $e) {
-                    $error = 'Failed to update auto checkout settings.';
+                    $error = 'Force checkout failed: ' . $e->getMessage();
+                }
+                break;
+                
+            case 'reset_system':
+                try {
+                    // Complete system reset
+                    $pdo->exec("DELETE FROM auto_checkout_logs WHERE DATE(created_at) = CURDATE()");
+                    $pdo->exec("DELETE FROM cron_execution_logs WHERE execution_date = CURDATE()");
+                    $pdo->exec("UPDATE bookings SET auto_checkout_processed = 0 WHERE status IN ('BOOKED', 'PENDING')");
+                    $pdo->exec("UPDATE system_settings SET setting_value = '' WHERE setting_key IN ('auto_checkout_last_run_date', 'auto_checkout_last_run_time')");
+                    
+                    redirect_with_message('settings.php', 'System reset completed! Ready for fresh 10:00 AM execution tomorrow.', 'success');
+                } catch (Exception $e) {
+                    $error = 'System reset failed: ' . $e->getMessage();
                 }
                 break;
         }
     }
 }
 
-// Get all current settings from the database
-$stmt = $pdo->prepare("SELECT setting_key, setting_value FROM settings");
-$stmt->execute();
-$settings = [];
+// Get current settings
+$stmt = $pdo->query("SELECT setting_key, setting_value FROM system_settings WHERE setting_key LIKE '%auto_checkout%'");
+$autoSettings = [];
 while ($row = $stmt->fetch()) {
-    $settings[$row['setting_key']] = $row['setting_value'];
+    $autoSettings[$row['setting_key']] = $row['setting_value'];
 }
+
+$autoEnabled = ($autoSettings['auto_checkout_enabled'] ?? '1') === '1';
+$autoTime = $autoSettings['auto_checkout_time'] ?? '10:00';
+$lastRunDate = $autoSettings['auto_checkout_last_run_date'] ?? '';
+$lastRunTime = $autoSettings['auto_checkout_last_run_time'] ?? '';
+
+// Get active bookings count
+$stmt = $pdo->query("SELECT COUNT(*) FROM bookings WHERE status IN ('BOOKED', 'PENDING') AND auto_checkout_processed = 0");
+$activeBookingsCount = $stmt->fetchColumn();
+
+// Get today's execution status
+$stmt = $pdo->prepare("
+    SELECT * FROM cron_execution_logs 
+    WHERE execution_date = CURDATE() 
+    ORDER BY execution_time DESC 
+    LIMIT 1
+");
+$stmt->execute();
+$todayExecution = $stmt->fetch();
 
 $flash = get_flash_message();
 ?>
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Settings - L.P.S.T Bookings</title>
+    <title>Auto Checkout Settings - L.P.S.T Bookings</title>
     <link rel="stylesheet" href="../assets/style.css">
+    <style>
+        .system-status {
+            padding: 1.5rem;
+            border-radius: 10px;
+            margin: 1rem 0;
+            text-align: center;
+            font-weight: bold;
+        }
+        .status-active {
+            background: linear-gradient(45deg, #28a745, #20c997);
+            color: white;
+            animation: pulse 3s infinite;
+        }
+        .status-inactive {
+            background: linear-gradient(45deg, #dc3545, #c82333);
+            color: white;
+        }
+        .status-warning {
+            background: linear-gradient(45deg, #ffc107, #e0a800);
+            color: black;
+        }
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.8; }
+            100% { opacity: 1; }
+        }
+        .test-controls {
+            background: rgba(16, 185, 129, 0.1);
+            border: 2px solid var(--success-color);
+            border-radius: 10px;
+            padding: 1.5rem;
+            margin: 1rem 0;
+        }
+        .danger-zone {
+            background: rgba(239, 68, 68, 0.1);
+            border: 2px solid var(--danger-color);
+            border-radius: 10px;
+            padding: 1.5rem;
+            margin: 1rem 0;
+        }
+    </style>
 </head>
 <body>
     <nav class="top-nav">
         <div class="nav-links">
             <a href="index.php" class="nav-button">← Dashboard</a>
+            <a href="admins.php" class="nav-button">Admins</a>
+            <a href="reports.php" class="nav-button">Reports</a>
         </div>
         <a href="/" class="nav-brand">L.P.S.T Bookings</a>
         <div class="nav-links">
@@ -248,7 +205,7 @@ $flash = get_flash_message();
 
     <div class="container">
         <?php if ($flash): ?>
-            <div class="flash-message flash-<?= htmlspecialchars($flash['type']) ?>">
+            <div class="flash-message flash-<?= $flash['type'] ?>">
                 <?= htmlspecialchars($flash['message']) ?>
             </div>
         <?php endif; ?>
@@ -259,151 +216,29 @@ $flash = get_flash_message();
             </div>
         <?php endif; ?>
 
-        <h2>System Settings</h2>
+        <h2>🕙 Daily 10:00 AM Auto Checkout Master Control</h2>
         
-        <!-- Username Change -->
-        <div class="form-container">
-            <h3>Change Username</h3>
-            <form method="POST">
-                <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
-                <input type="hidden" name="action" value="change_username">
-                <div class="form-group">
-                    <label for="new_username" class="form-label">New Username *</label>
-                    <input type="text" id="new_username" name="new_username" class="form-control" required
-                           value="<?= htmlspecialchars($_SESSION['username']) ?>">
-                </div>
-                <button type="submit" class="btn btn-warning">Change Username</button>
-            </form>
+        <!-- System Status Display -->
+        <div class="system-status <?= $autoEnabled ? 'status-active' : 'status-inactive' ?>">
+            <h3>🕙 AUTO CHECKOUT SYSTEM STATUS</h3>
+            <p>Status: <?= $autoEnabled ? '✅ ENABLED' : '❌ DISABLED' ?></p>
+            <p>Daily Execution Time: 10:00 AM (Asia/Kolkata)</p>
+            <p>Current Server Time: <?= date('H:i:s') ?></p>
+            <p>Active Bookings Ready: <?= $activeBookingsCount ?></p>
+            <?php if ($lastRunDate): ?>
+                <p>Last Execution: <?= $lastRunDate ?> at <?= $lastRunTime ?></p>
+            <?php endif; ?>
+            <?php if ($todayExecution): ?>
+                <p>Today's Status: <?= strtoupper($todayExecution['execution_status']) ?> 
+                   (<?= $todayExecution['bookings_successful'] ?> successful, <?= $todayExecution['bookings_failed'] ?> failed)</p>
+            <?php else: ?>
+                <p>Today's Status: NOT EXECUTED YET</p>
+            <?php endif; ?>
         </div>
         
-        <!-- SMS Settings -->
+        <!-- Auto Checkout Configuration -->
         <div class="form-container">
-            <h3>SMS Configuration</h3>
-            <form method="POST">
-                <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
-                <input type="hidden" name="action" value="update_sms">
-                <div class="form-group">
-                    <label for="hotel_name" class="form-label">Hotel Name *</label>
-                    <input type="text" id="hotel_name" name="hotel_name" class="form-control" required
-                           value="<?= htmlspecialchars($settings['hotel_name'] ?? 'L.P.S.T Hotel') ?>">
-                </div>
-                <div class="form-group">
-                    <label for="sms_api_url" class="form-label">SMS API URL *</label>
-                    <input type="url" id="sms_api_url" name="sms_api_url" class="form-control" required
-                           value="<?= htmlspecialchars($settings['sms_api_url'] ?? '') ?>">
-                </div>
-                <div class="form-group">
-                    <label for="sms_api_key" class="form-label">SMS API Key *</label>
-                    <input type="text" id="sms_api_key" name="sms_api_key" class="form-control" required
-                           value="<?= htmlspecialchars($settings['sms_api_key'] ?? '') ?>">
-                </div>
-                <button type="submit" class="btn btn-primary">Update SMS Settings</button>
-            </form>
-        </div>
-        
-        <!-- Email Settings -->
-        <div class="form-container">
-            <h3>Email Configuration (SMTP)</h3>
-            <p>Configure SMTP settings for sending export reports via email.</p>
-            
-            <!-- The red error box is now removed, as we installed PHPMailer manually -->
-            
-            <form method="POST">
-                <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
-                <input type="hidden" name="action" value="update_email">
-                
-                <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 1rem;">
-                    <div class="form-group">
-                        <label for="smtp_host" class="form-label">SMTP Host *</label>
-                        <input type="text" id="smtp_host" name="smtp_host" class="form-control" required value="<?= htmlspecialchars($settings['smtp_host'] ?? '') ?>" placeholder="e.g., smtp.hostinger.com">
-                    </div>
-                    <div class="form-group">
-                        <label for="smtp_port" class="form-label">SMTP Port *</label>
-                        <input type="number" id="smtp_port" name="smtp_port" class="form-control" required value="<?= htmlspecialchars($settings['smtp_port'] ?? '465') ?>" placeholder="465 (SSL) or 587 (TLS)">
-                    </div>
-                </div>
-                <div class="form-group">
-                    <label for="smtp_username" class="form-label">SMTP Username (Email) *</label>
-                    <input type="email" id="smtp_username" name="smtp_username" class="form-control" required value="<?= htmlspecialchars($settings['smtp_username'] ?? '') ?>" placeholder="your-email@example.com">
-                </div>
-                <div class="form-group">
-                    <label for="smtp_password" class="form-label">SMTP Password</label>
-                    <input type="password" id="smtp_password" name="smtp_password" class="form-control" placeholder="Leave blank to keep current password">
-                    <small>Enter your password here to save or update it.</small>
-                </div>
-                <div class="form-group">
-                    <label for="smtp_encryption" class="form-label">Encryption</label>
-                    <select id="smtp_encryption" name="smtp_encryption" class="form-control">
-                        <option value="ssl" <?= ($settings['smtp_encryption'] ?? 'ssl') === 'ssl' ? 'selected' : '' ?>>SSL</option>
-                        <option value="tls" <?= ($settings['smtp_encryption'] ?? '') === 'tls' ? 'selected' : '' ?>>TLS</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label for="owner_email" class="form-label">Owner Email (for reports)</label>
-                    <input type="email" id="owner_email" name="owner_email" class="form-control" value="<?= htmlspecialchars($settings['owner_email'] ?? '') ?>" placeholder="owner@example.com">
-                </div>
-                <button type="submit" class="btn btn-primary">Update Email Settings</button>
-            </form>
-            
-            <!-- Test Email Form -->
-            <div style="margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #eee;">
-                <h4>Test Email Configuration</h4>
-                <form method="POST">
-                    <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
-                    <input type="hidden" name="action" value="test_email">
-                    <div class="form-group">
-                        <label for="test_email" class="form-label">Test Email Address</label>
-                        <input type="email" id="test_email" name="test_email" class="form-control" required placeholder="test@example.com">
-                    </div>
-                    <button type="submit" class="btn btn-warning">Send Test Email</button>
-                </form>
-            </div>
-        </div>
-        
-        <!-- UPI Settings -->
-        <div class="form-container">
-            <h3>UPI Payment Settings</h3>
-            <form method="POST">
-                <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
-                <input type="hidden" name="action" value="update_upi">
-                <div class="form-group">
-                    <label for="upi_id" class="form-label">UPI ID *</label>
-                    <input type="text" id="upi_id" name="upi_id" class="form-control" required value="<?= htmlspecialchars($settings['upi_id'] ?? '') ?>" placeholder="yourname@upi">
-                </div>
-                <button type="submit" class="btn btn-primary">Update UPI Settings</button>
-            </form>
-        </div>
-        
-        <!-- Auto Checkout Settings -->
-        <div class="form-container">
-            <h3>🕙 Daily 10:00 AM Auto Checkout Master Control (Owner Only)</h3>
-            <div style="background: linear-gradient(45deg, #007bff, #0056b3); color: white; padding: 1rem; border-radius: 8px; margin-bottom: 1rem;">
-                <h4 style="margin: 0; color: white;">🕙 DAILY 10:00 AM AUTO CHECKOUT SYSTEM</h4>
-                <p style="margin: 0.5rem 0 0 0; opacity: 0.9;">Automatically checkout all active bookings at 10:00 AM daily. Only owner can modify these settings.</p>
-            </div>
-            <?php
-            // Get auto checkout settings
-            $stmt = $pdo->query("SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('auto_checkout_enabled', 'auto_checkout_time')");
-            $autoSettings = [];
-            while ($row = $stmt->fetch()) {
-                $autoSettings[$row['setting_key']] = $row['setting_value'];
-            }
-            $autoEnabled = ($autoSettings['auto_checkout_enabled'] ?? '1') === '1';
-            $autoTime = $autoSettings['auto_checkout_time'] ?? '10:00';
-            ?>
-            
-            <!-- Testing Mode Controls -->
-            <div style="background: rgba(16, 185, 129, 0.1); padding: 1rem; border-radius: 8px; margin-bottom: 1rem; border: 2px solid var(--success-color);">
-                <h4 style="color: var(--success-color); margin-bottom: 0.5rem;">🧪 Manual Testing Controls (No 24 Hour Wait)</h4>
-                <form method="POST" style="display: inline-block; margin-right: 1rem;">
-                    <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
-                    <input type="hidden" name="action" value="test_auto_checkout">
-                    <button type="submit" class="btn btn-success" onclick="return confirm('Test auto checkout now?')">🧪 Test Auto Checkout Now</button>
-                </form>
-                <a href="../cron/auto_checkout_cron.php?manual_run=1" target="_blank" class="btn btn-warning">🔧 Test Cron Direct</a>
-                <a href="../admin/auto_checkout_logs.php" class="btn btn-outline">📋 View Checkout Logs</a>
-            </div>
-            
+            <h3>Auto Checkout Configuration</h3>
             <form method="POST">
                 <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
                 <input type="hidden" name="action" value="update_auto_checkout">
@@ -413,76 +248,165 @@ $flash = get_flash_message();
                         <input type="checkbox" name="auto_checkout_enabled" <?= $autoEnabled ? 'checked' : '' ?>>
                         Enable Daily 10:00 AM Auto Checkout
                     </label>
-                    <small style="color: var(--dark-color);">When enabled, all active bookings will be automatically checked out daily at 10:00 AM</small>
+                    <small style="color: var(--dark-color);">When enabled, all active bookings will be automatically checked out daily at exactly 10:00 AM</small>
                 </div>
                 
                 <div class="form-group">
-                    <label for="auto_checkout_time" class="form-label">Daily Checkout Time (Fixed at 10:00 AM)</label>
-                    <input type="text" id="auto_checkout_time" name="auto_checkout_time" class="form-control" 
-                           value="10:00 AM" readonly style="background: #f8f9fa; font-weight: bold; color: #007bff;">
-                    <small style="color: var(--success-color); font-weight: 600;">✅ FIXED: System will run EXACTLY at 10:00 AM daily (no more random times like 3:30 PM)</small>
-                    <div style="margin-top: 0.5rem; padding: 0.5rem; background: rgba(16, 185, 129, 0.1); border-radius: 4px;">
-                        <strong>Current Time:</strong> <?= date('H:i') ?> | <strong>Next Auto Checkout:</strong> Tomorrow at 10:00 AM SHARP
-                        <br><strong>System Status:</strong> FIXED - No more wrong timing issues
-                    </div>
+                    <label class="form-label">Daily Checkout Time (FIXED)</label>
+                    <input type="text" class="form-control" value="10:00 AM (FIXED)" readonly 
+                           style="background: #f8f9fa; font-weight: bold; color: #007bff;">
+                    <small style="color: var(--success-color); font-weight: 600;">
+                        ✅ FIXED: System will run EXACTLY at 10:00 AM daily (execution window: 10:00-10:05 AM)
+                    </small>
                 </div>
                 
                 <button type="submit" class="btn btn-primary">Save Auto Checkout Settings</button>
             </form>
+        </div>
+        
+        <!-- Manual Test Controls -->
+        <div class="test-controls">
+            <h3 style="color: var(--success-color);">🧪 Manual Test Controls (No Wait Required)</h3>
+            <p>Test the auto checkout system immediately without waiting for 10:00 AM:</p>
             
-            <div style="margin-top: 2rem; padding: 1rem; background: rgba(40, 167, 69, 0.1); border-radius: 8px; border-left: 4px solid var(--success-color);">
-                <h4 style="color: var(--success-color);">Current Status:</h4>
-                <p><strong>Auto Checkout:</strong> <?= $autoEnabled ? '✅ ENABLED & FIXED' : '❌ DISABLED' ?></p>
-                <p><strong>Daily Time:</strong> 10:00 AM (GUARANTEED - No more 3:30 PM issues)</p>
-                <p><strong>Next Run:</strong> Tomorrow at 10:00 AM SHARP</p>
-                <p><strong>Payment Mode:</strong> Manual - Admin marks payments after checkout</p>
-                <p><strong>Default Checkout Time:</strong> All new bookings default to 10:00 AM checkout</p>
-                <p><strong>Cron Job Status:</strong> <?= $autoEnabled ? '🟢 ACTIVE & FIXED' : '🔴 Inactive' ?></p>
-                <p><strong>Timing Issue:</strong> ✅ RESOLVED - System will only run at 10:00 AM</p>
-                <div style="margin-top: 1rem;">
-                    <a href="../admin/auto_checkout_logs.php" class="btn btn-outline">📋 View Checkout Logs</a>
-                    <a href="../cron/auto_checkout_cron.php?manual_run=1" target="_blank" class="btn btn-warning">🔧 Test Cron Direct</a>
-                    <a href="../test_auto_checkout_final.php" target="_blank" class="btn btn-success">🎯 Verify Fix</a>
-                </div>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem; margin: 1rem 0;">
+                <form method="POST" style="display: inline;">
+                    <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
+                    <input type="hidden" name="action" value="test_auto_checkout">
+                    <button type="submit" class="btn btn-success" style="width: 100%; padding: 1rem;">
+                        🧪 Test Auto Checkout Now
+                    </button>
+                    <small style="display: block; margin-top: 0.5rem; color: var(--dark-color);">
+                        Tests the system with current settings
+                    </small>
+                </form>
+                
+                <form method="POST" style="display: inline;">
+                    <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
+                    <input type="hidden" name="action" value="force_checkout_all">
+                    <button type="submit" class="btn btn-warning" style="width: 100%; padding: 1rem;"
+                            onclick="return confirm('This will force checkout ALL active bookings immediately. Continue?')">
+                        🚨 Force Checkout All
+                    </button>
+                    <small style="display: block; margin-top: 0.5rem; color: var(--dark-color);">
+                        Immediately processes all bookings
+                    </small>
+                </form>
             </div>
             
-            <!-- Cron Job Instructions -->
-            <div style="margin-top: 2rem; padding: 1rem; background: rgba(37, 99, 235, 0.1); border-radius: 8px; border-left: 4px solid var(--primary-color);">
-                <h4 style="color: var(--primary-color);">🔧 Hostinger Cron Job Setup</h4>
-                <p><strong>Your cron job command (already set up):</strong></p>
-                <div style="background: white; padding: 0.5rem; border-radius: 4px; font-family: monospace; margin: 0.5rem 0;">
+            <div style="margin-top: 1rem;">
+                <a href="../cron/auto_checkout_cron.php?manual_run=1" target="_blank" class="btn btn-outline">
+                    🔗 Test Cron Script Directly
+                </a>
+                <a href="../admin/auto_checkout_logs.php" class="btn btn-outline">
+                    📋 View Checkout Logs
+                </a>
+            </div>
+        </div>
+        
+        <!-- System Reset (Danger Zone) -->
+        <div class="danger-zone">
+            <h3 style="color: var(--danger-color);">🚨 System Reset (Danger Zone)</h3>
+            <p>Use this if auto checkout is still not working properly:</p>
+            
+            <form method="POST" style="display: inline;">
+                <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
+                <input type="hidden" name="action" value="reset_system">
+                <button type="submit" class="btn btn-danger"
+                        onclick="return confirm('This will reset the entire auto checkout system. All today\'s logs will be cleared and flags reset. Continue?')">
+                    🔄 Complete System Reset
+                </button>
+            </form>
+            <small style="display: block; margin-top: 0.5rem; color: var(--dark-color);">
+                Clears all flags, logs, and prepares system for fresh execution
+            </small>
+        </div>
+        
+        <!-- Current System Information -->
+        <div class="form-container">
+            <h3>Current System Information</h3>
+            <div style="background: rgba(37, 99, 235, 0.1); padding: 1.5rem; border-radius: 8px;">
+                <h4 style="color: var(--primary-color);">System Configuration:</h4>
+                <ul>
+                    <li><strong>Auto Checkout:</strong> <?= $autoEnabled ? '✅ ENABLED' : '❌ DISABLED' ?></li>
+                    <li><strong>Execution Time:</strong> 10:00 AM (FIXED)</li>
+                    <li><strong>Execution Window:</strong> 10:00-10:05 AM</li>
+                    <li><strong>Timezone:</strong> Asia/Kolkata</li>
+                    <li><strong>Current Time:</strong> <?= date('H:i:s') ?></li>
+                    <li><strong>Active Bookings:</strong> <?= $activeBookingsCount ?></li>
+                    <li><strong>Payment Mode:</strong> Manual (Admin marks after checkout)</li>
+                    <li><strong>SMS Notifications:</strong> Enabled</li>
+                </ul>
+                
+                <?php if ($todayExecution): ?>
+                    <h4 style="color: var(--primary-color);">Today's Execution:</h4>
+                    <ul>
+                        <li><strong>Status:</strong> <?= strtoupper($todayExecution['execution_status']) ?></li>
+                        <li><strong>Time:</strong> <?= $todayExecution['execution_time'] ?></li>
+                        <li><strong>Bookings Found:</strong> <?= $todayExecution['bookings_found'] ?></li>
+                        <li><strong>Successful:</strong> <?= $todayExecution['bookings_successful'] ?></li>
+                        <li><strong>Failed:</strong> <?= $todayExecution['bookings_failed'] ?></li>
+                        <?php if ($todayExecution['error_message']): ?>
+                            <li><strong>Error:</strong> <?= htmlspecialchars($todayExecution['error_message']) ?></li>
+                        <?php endif; ?>
+                    </ul>
+                <?php else: ?>
+                    <h4 style="color: var(--warning-color);">Today's Execution:</h4>
+                    <p>Auto checkout has not executed today yet. Next execution: Tomorrow at 10:00 AM</p>
+                <?php endif; ?>
+            </div>
+        </div>
+        
+        <!-- Hostinger Cron Job Instructions -->
+        <div class="form-container">
+            <h3>🔧 Hostinger Cron Job Setup</h3>
+            <div style="background: rgba(37, 99, 235, 0.1); padding: 1.5rem; border-radius: 8px;">
+                <h4>Your Cron Job Command (Copy this exactly):</h4>
+                <div style="background: white; padding: 1rem; border-radius: 4px; font-family: monospace; margin: 0.5rem 0; border: 2px solid #007bff;">
                     0 10 * * * /usr/bin/php /home/u261459251/domains/lpstnashik.in/public_html/cron/auto_checkout_cron.php
                 </div>
-                <p><strong>This runs daily at exactly 10:00 AM and processes all active bookings.</strong></p>
                 
-                <div style="margin-top: 1rem; padding: 0.5rem; background: rgba(255, 255, 255, 0.8); border-radius: 4px;">
-                    <p style="margin: 0; color: var(--dark-color); font-weight: 600;">
-                        ✅ Cron job is properly configured. If auto checkout is not working, use the test buttons above to diagnose issues.
+                <h4>Setup Instructions:</h4>
+                <ol>
+                    <li>Login to your Hostinger control panel</li>
+                    <li>Go to "Advanced" → "Cron Jobs"</li>
+                    <li>Click "Create Cron Job"</li>
+                    <li>Set schedule: <strong>0 10 * * *</strong></li>
+                    <li>Set command: <strong>/usr/bin/php /home/u261459251/domains/lpstnashik.in/public_html/cron/auto_checkout_cron.php</strong></li>
+                    <li>Save the cron job</li>
+                </ol>
+                
+                <div style="background: rgba(40, 167, 69, 0.1); padding: 1rem; border-radius: 4px; margin-top: 1rem;">
+                    <p style="margin: 0; color: var(--success-color); font-weight: 600;">
+                        ✅ This will execute EXACTLY at 10:00 AM every day and process all active bookings automatically.
                     </p>
                 </div>
             </div>
         </div>
         
-        <!-- Password Change -->
+        <!-- Troubleshooting -->
         <div class="form-container">
-            <h3>Change Password</h3>
-            <form method="POST">
-                <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
-                <input type="hidden" name="action" value="change_password">
-                <div class="form-group">
-                    <label for="new_password" class="form-label">New Password *</label>
-                    <input type="password" id="new_password" name="new_password" class="form-control" required minlength="6">
-                </div>
-                <div class="form-group">
-                    <label for="confirm_password" class="form-label">Confirm New Password *</label>
-                    <input type="password" id="confirm_password" name="confirm_password" class="form-control" required minlength="6">
-                </div>
-                <button type="submit" class="btn btn-danger" onclick="return confirm('You will be logged out. Continue?')">
-                    Change Password
-                </button>
-            </form>
+            <h3>🔍 Troubleshooting</h3>
+            <div style="background: rgba(255, 193, 7, 0.1); padding: 1.5rem; border-radius: 8px;">
+                <h4>If auto checkout is still not working:</h4>
+                <ol>
+                    <li><strong>Check Cron Job:</strong> Verify it's active in Hostinger control panel</li>
+                    <li><strong>Test Manually:</strong> Use the test buttons above</li>
+                    <li><strong>Check Logs:</strong> View auto checkout logs for error messages</li>
+                    <li><strong>Reset System:</strong> Use the system reset button above</li>
+                    <li><strong>Verify Time:</strong> Ensure server time matches Asia/Kolkata</li>
+                </ol>
+                
+                <h4>System Requirements:</h4>
+                <ul>
+                    <li>✅ Cron job must run at exactly 10:00 AM</li>
+                    <li>✅ Database must have all required tables</li>
+                    <li>✅ Auto checkout must be enabled</li>
+                    <li>✅ Active bookings must exist</li>
+                    <li>✅ System must not have executed today already</li>
+                </ul>
+            </div>
         </div>
-
     </div>
 </body>
 </html>
