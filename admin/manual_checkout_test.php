@@ -253,7 +253,7 @@ $flash = get_flash_message();
                         🧪 Test Auto Checkout Now
                     </button>
                     <small style="display: block; margin-top: 0.5rem; color: var(--dark-color);">
-                        Respects time settings and runs normal logic
+                        Tests checkout - NO payment calculation
                     </small>
                 </form>
                 
@@ -265,7 +265,7 @@ $flash = get_flash_message();
                         🚨 Force Checkout All
                     </button>
                     <small style="display: block; margin-top: 0.5rem; color: var(--dark-color);">
-                        Ignores time settings, processes all bookings
+                        Processes all bookings - Admin marks payments later
                     </small>
                 </form>
             </div>
@@ -327,6 +327,7 @@ $flash = get_flash_message();
                     <li><strong>Active Bookings:</strong> <?= $activeBookingsCount ?> bookings ready for checkout</li>
                     <li><strong>Cron Job:</strong> Should run daily at <?= $autoCheckoutTime ?></li>
                     <li><strong>Manual Testing:</strong> Available anytime for admin/owner</li>
+                    <li><strong>Payment:</strong> MANUAL ONLY - Admin marks payments after checkout</li>
                 </ul>
                 
                 <h4>How It Works:</h4>
@@ -334,7 +335,8 @@ $flash = get_flash_message();
                     <li>Cron job runs daily at <?= $autoCheckoutTime ?> (or when testing mode is enabled)</li>
                     <li>System checks if it's time for auto checkout</li>
                     <li>All active bookings are automatically checked out</li>
-                    <li>No automatic payment calculation - admin marks payments manually</li>
+                    <li>NO automatic payment calculation</li>
+                    <li>Admin marks payments manually in checkout logs</li>
                     <li>SMS notifications are sent to guests</li>
                     <li>Detailed logs are maintained for tracking</li>
                 </ol>
