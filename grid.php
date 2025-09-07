@@ -165,11 +165,6 @@ $flash = get_flash_message();
                         <?= $isOccupied ? $booking['status'] : 'VACANT' ?>
                     </div>
                     
-                    <!-- Auto Checkout Notice -->
-                    <div style="font-size: 12px; color: rgba(255,255,255,0.8); margin-top: 0.5rem; text-align: center;">
-                        <?= $autoCheckoutNotice ?> | Manual Payment
-                    </div>
-                    
                     <div class="action-buttons">
                         <?php if (!$isOccupied && !$isTodayAdvance): ?>
                             <a href="booking_new.php?type=<?= $resource['type'] ?>&id=<?= $resource['id'] ?>" class="btn btn-primary" onclick="event.stopPropagation()">Book Now</a>

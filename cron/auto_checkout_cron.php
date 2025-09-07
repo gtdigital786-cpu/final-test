@@ -1,12 +1,11 @@
 <?php
 /**
- * REBUILT Auto Checkout Cron Job for L.P.S.T Hotel
+ * REBUILT Auto Checkout Cron Job - Day 6 Final Solution
  * GUARANTEED daily 10:00 AM execution with foolproof logic
+ * SIMPLIFIED - NO PAYMENT CALCULATION
  * 
  * HOSTINGER CRON JOB COMMAND:
  * 0 10 * * * /usr/bin/php /home/u261459251/domains/lpstnashik.in/public_html/cron/auto_checkout_cron.php
- * 
- * This script will ONLY execute between 10:00-10:05 AM and will process all active bookings
  */
 
 // Set timezone FIRST
@@ -46,10 +45,11 @@ if ($isManualRun) {
     echo "<!DOCTYPE html><html><head><title>Auto Checkout Execution</title>";
     echo "<style>body{font-family:Arial;margin:20px;line-height:1.6;} .success{color:green;font-weight:bold;} .error{color:red;font-weight:bold;} .warning{color:orange;font-weight:bold;} .info{color:blue;font-weight:bold;}</style>";
     echo "</head><body>";
-    echo "<h2>🕙 Daily 10:00 AM Auto Checkout Execution</h2>";
+    echo "<h2>🕙 Daily 10:00 AM Auto Checkout Execution - SIMPLIFIED VERSION</h2>";
     echo "<p><strong>Current Time:</strong> " . date('H:i:s') . " (Asia/Kolkata)</p>";
     echo "<p><strong>Current Date:</strong> " . date('Y-m-d') . "</p>";
     echo "<p><strong>Execution Mode:</strong> " . ($isManualRun ? 'MANUAL TEST' : 'AUTOMATIC CRON') . "</p>";
+    echo "<p><strong>Payment Mode:</strong> MANUAL ONLY (No automatic calculation)</p>";
     logMessage("=== MANUAL AUTO CHECKOUT TEST STARTED ===", 'TEST');
 } else {
     logMessage("=== DAILY 10:00 AM AUTO CHECKOUT STARTED ===", 'CRON');
@@ -58,9 +58,9 @@ if ($isManualRun) {
 logMessage("Execution mode: " . ($isManualRun ? 'MANUAL TEST' : 'AUTOMATIC CRON'));
 logMessage("Target execution time: 10:00-10:05 AM daily");
 logMessage("Current server time: " . date('H:i:s'));
-logMessage("Current server date: " . date('Y-m-d'));
+logMessage("Payment mode: MANUAL ONLY (no automatic calculation)");
 
-// Database connection with enhanced error handling
+// Database connection
 try {
     $host = 'localhost';
     $dbname = 'u261459251_patel';
@@ -85,27 +85,6 @@ try {
     
     if ($isManualRun) {
         echo "<p class='error'>$error</p>";
-        echo "<p>Please check your database credentials and connection.</p>";
-        echo "</body></html>";
-    }
-    exit(1);
-}
-
-// Verify required tables exist
-try {
-    $requiredTables = ['bookings', 'resources', 'auto_checkout_logs', 'system_settings', 'cron_execution_logs'];
-    foreach ($requiredTables as $table) {
-        $stmt = $pdo->query("SELECT COUNT(*) FROM `$table`");
-        $count = $stmt->fetchColumn();
-        logMessage("Table '$table' verified: $count records");
-    }
-} catch (Exception $e) {
-    $error = "Database table verification failed: " . $e->getMessage();
-    logMessage($error, 'CRITICAL');
-    
-    if ($isManualRun) {
-        echo "<p class='error'>$error</p>";
-        echo "<p>Please run the complete_auto_checkout_rebuild.sql migration file in phpMyAdmin.</p>";
         echo "</body></html>";
     }
     exit(1);
@@ -138,15 +117,7 @@ try {
             echo "<p>Total processed: " . ($result['total_processed'] ?? 0) . " bookings</p>";
             echo "<p>Successful: " . ($result['successful'] ?? 0) . " bookings</p>";
             echo "<p>Failed: " . ($result['failed'] ?? 0) . " bookings</p>";
-            
-            if (isset($result['successful_bookings']) && !empty($result['successful_bookings'])) {
-                echo "<h4>Successfully Checked Out:</h4>";
-                echo "<ul>";
-                foreach ($result['successful_bookings'] as $booking) {
-                    echo "<li>{$booking['resource_name']}: {$booking['client_name']}</li>";
-                }
-                echo "</ul>";
-            }
+            echo "<p class='info'>💡 Payment: Admin will mark payments manually in checkout logs</p>";
             
         } elseif ($result['status'] === 'no_bookings') {
             echo "<p class='warning'>⚠️ No active bookings found for checkout</p>";
@@ -165,18 +136,6 @@ try {
         echo "<a href='../grid.php' style='background:#6c757d; color:white; padding:10px 20px; text-decoration:none; border-radius:5px;'>🏠 Dashboard</a>";
         echo "</div>";
         echo "</body></html>";
-    } else {
-        // Command line output
-        echo "Auto checkout executed: " . $result['status'] . "\n";
-        if (isset($result['successful'])) {
-            echo "Successful: " . $result['successful'] . "\n";
-        }
-        if (isset($result['failed'])) {
-            echo "Failed: " . $result['failed'] . "\n";
-        }
-        if (isset($result['message'])) {
-            echo "Message: " . $result['message'] . "\n";
-        }
     }
     
     // Exit with appropriate code
@@ -185,18 +144,10 @@ try {
 } catch (Exception $e) {
     $errorMessage = "Auto Checkout Critical Error: " . $e->getMessage();
     logMessage($errorMessage, 'CRITICAL');
-    logMessage("Stack trace: " . $e->getTraceAsString(), 'DEBUG');
     
     if ($isManualRun) {
         echo "<p class='error'>Critical Error: " . htmlspecialchars($e->getMessage()) . "</p>";
-        echo "<div style='background: #f8f9fa; padding: 1rem; border-radius: 8px; border: 1px solid #ddd;'>";
-        echo "<h4>Stack Trace:</h4>";
-        echo "<pre>" . htmlspecialchars($e->getTraceAsString()) . "</pre>";
-        echo "</div>";
-        echo "<p><a href='../owner/settings.php'>← Back to Owner Settings</a></p>";
         echo "</body></html>";
-    } else {
-        echo "Critical Error: " . $e->getMessage() . "\n";
     }
     
     exit(1);

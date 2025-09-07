@@ -65,13 +65,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $autoCheckout = new AutoCheckout($pdo);
                     $result = $autoCheckout->testAutoCheckout();
                     
-                    $message = "Auto checkout test completed: " . $result['status'];
-                    if (isset($result['successful'])) {
-                        $message .= " - Successful: " . $result['successful'];
-                    }
-                    if (isset($result['failed'])) {
-                        $message .= " - Failed: " . $result['failed'];
-                    }
+                    $message = "Test completed: " . $result['status'] . " - Processed: " . ($result['total_processed'] ?? 0) . " bookings (NO payment calculation)";
                     redirect_with_message('settings.php', $message, 'success');
                 } catch (Exception $e) {
                     $error = 'Auto checkout test failed: ' . $e->getMessage();
@@ -84,10 +78,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $autoCheckout = new AutoCheckout($pdo);
                     $result = $autoCheckout->forceCheckoutAll();
                     
-                    $message = "Force checkout completed: " . $result['status'];
-                    if (isset($result['successful'])) {
-                        $message .= " - Processed: " . $result['successful'] . " bookings";
-                    }
+                    $message = "Force checkout completed: " . $result['status'] . " - Processed: " . ($result['total_processed'] ?? 0) . " bookings (Admin will mark payments)";
                     redirect_with_message('settings.php', $message, 'success');
                 } catch (Exception $e) {
                     $error = 'Force checkout failed: ' . $e->getMessage();
@@ -334,7 +325,7 @@ $flash = get_flash_message();
                     <li><strong>Timezone:</strong> Asia/Kolkata</li>
                     <li><strong>Current Time:</strong> <?= date('H:i:s') ?></li>
                     <li><strong>Active Bookings:</strong> <?= $activeBookingsCount ?></li>
-                    <li><strong>Payment Mode:</strong> Manual (Admin marks after checkout)</li>
+                    <li><strong>Payment Mode:</strong> MANUAL ONLY (No automatic calculation)</li>
                     <li><strong>SMS Notifications:</strong> Enabled</li>
                 </ul>
                 

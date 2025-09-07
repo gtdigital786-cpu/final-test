@@ -223,9 +223,9 @@ $flash = get_flash_message();
                             <th style="padding: 0.75rem; text-align: left; border-bottom: 1px solid var(--border-color);">Resource</th>
                             <th style="padding: 0.75rem; text-align: left; border-bottom: 1px solid var(--border-color);">Guest Name</th>
                             <th style="padding: 0.75rem; text-align: left; border-bottom: 1px solid var(--border-color);">Status</th>
-                            <th style="padding: 0.75rem; text-align: left; border-bottom: 1px solid var(--border-color);">Amount</th>
-                            <th style="padding: 0.75rem; text-align: left; border-bottom: 1px solid var(--border-color);">Duration</th>
+                            <th style="padding: 0.75rem; text-align: left; border-bottom: 1px solid var(--border-color);">Payment Status</th>
                             <th style="padding: 0.75rem; text-align: left; border-bottom: 1px solid var(--border-color);">Notes</th>
+                            <th style="padding: 0.75rem; text-align: left; border-bottom: 1px solid var(--border-color);">Actions</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -261,21 +261,30 @@ $flash = get_flash_message();
                                         </span>
                                     </td>
                                     <td style="padding: 0.75rem; border-bottom: 1px solid var(--border-color);">
-                                        <?php if ($log['amount_calculated'] > 0): ?>
-                                            <strong style="color: var(--success-color);"><?= format_currency($log['amount_calculated']) ?></strong>
+                                        <?php 
+                                        // Check if payment exists for this booking
+                                        $stmt = $pdo->prepare("SELECT COUNT(*) FROM payments WHERE booking_id = ? AND payment_status = 'COMPLETED'");
+                                        $stmt->execute([$log['booking_id']]);
+                                        $isPaid = $stmt->fetchColumn() > 0;
+                                        ?>
+                                        <?php if ($isPaid): ?>
+                                            <span style="color: var(--success-color); font-weight: 600;">✅ PAID</span>
                                         <?php else: ?>
-                                            <span style="color: var(--dark-color);">-</span>
-                                        <?php endif; ?>
-                                    </td>
-                                    <td style="padding: 0.75rem; border-bottom: 1px solid var(--border-color);">
-                                        <?php if ($log['duration_hours'] > 0): ?>
-                                            <strong><?= $log['duration_hours'] ?>h</strong>
-                                        <?php else: ?>
-                                            <span style="color: var(--dark-color);">-</span>
+                                            <span style="color: var(--danger-color); font-weight: 600;">❌ UNPAID</span>
                                         <?php endif; ?>
                                     </td>
                                     <td style="padding: 0.75rem; border-bottom: 1px solid var(--border-color);">
                                         <small><?= htmlspecialchars($log['notes']) ?></small>
+                                    </td>
+                                    <td style="padding: 0.75rem; border-bottom: 1px solid var(--border-color);">
+                                        <?php if (!$isPaid && $log['booking_id']): ?>
+                                            <button onclick="markAsPaid(<?= $log['booking_id'] ?>, '<?= htmlspecialchars($log['resource_name']) ?>')" 
+                                                    class="btn btn-success" style="font-size: 0.8rem; padding: 0.4rem 0.8rem;">
+                                                Mark Paid
+                                            </button>
+                                        <?php else: ?>
+                                            <span style="color: var(--success-color);">✅ Complete</span>
+                                        <?php endif; ?>
                                     </td>
                                 </tr>
                             <?php endforeach; ?>
@@ -302,5 +311,64 @@ $flash = get_flash_message();
             <?php endif; ?>
         </div>
     </div>
+
+    <!-- Mark Paid Modal -->
+    <div id="markPaidModal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Mark Payment as Received</h3>
+                <button type="button" class="close-modal" onclick="closeMarkPaidModal()">&times;</button>
+            </div>
+            <form method="POST" action="../payment_process.php">
+                <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
+                <input type="hidden" name="action" value="mark_checkout_paid">
+                <input type="hidden" name="booking_id" id="markPaidBookingId">
+                
+                <div class="form-group">
+                    <label class="form-label">Resource</label>
+                    <input type="text" id="markPaidResourceName" class="form-control" readonly>
+                </div>
+                
+                <div class="form-group">
+                    <label for="paid_amount" class="form-label">Amount Received (₹) *</label>
+                    <input type="number" id="paid_amount" name="amount" class="form-control" min="1" step="0.01" required>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Payment Method *</label>
+                    <div style="margin: 0.5rem 0;">
+                        <input type="radio" id="paid_online" name="payment_method" value="ONLINE" required>
+                        <label for="paid_online">Online (UPI/Net Banking/Card)</label>
+                    </div>
+                    <div>
+                        <input type="radio" id="paid_offline" name="payment_method" value="OFFLINE" required>
+                        <label for="paid_offline">Offline (Cash)</label>
+                    </div>
+                </div>
+                
+                <button type="submit" class="btn btn-success">Mark as Paid</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        function markAsPaid(bookingId, resourceName) {
+            document.getElementById('markPaidBookingId').value = bookingId;
+            document.getElementById('markPaidResourceName').value = resourceName;
+            document.getElementById('markPaidModal').style.display = 'flex';
+        }
+        
+        function closeMarkPaidModal() {
+            document.getElementById('markPaidModal').style.display = 'none';
+        }
+        
+        // Close modal when clicking outside
+        window.addEventListener('click', function(e) {
+            const modal = document.getElementById('markPaidModal');
+            if (e.target === modal) {
+                closeMarkPaidModal();
+            }
+        });
+    </script>
 </body>
 </html>

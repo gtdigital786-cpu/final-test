@@ -269,7 +269,8 @@ h4 { font-size: 1.5rem; }
 .resource-box:not(.expanded) .resource-details,
 .resource-box:not(.expanded) .status-badge,
 .resource-box:not(.expanded) .today-badge,
-.resource-box:not(.expanded) .live-counter {
+.resource-box:not(.expanded) .live-counter,
+.resource-box:not(.expanded) .auto-checkout-notice {
   display: none;
 }
 
@@ -279,13 +280,27 @@ h4 { font-size: 1.5rem; }
 .resource-box.expanded .resource-details,
 .resource-box.expanded .status-badge,
 .resource-box.expanded .today-badge,
-.resource-box.expanded .live-counter {
+.resource-box.expanded .live-counter,
+.resource-box.expanded .auto-checkout-notice {
   display: block;
 }
 
 .resource-box.expanded .resource-number {
   font-size: 1.5rem;
   margin-bottom: 0.5rem;
+}
+
+/* Hide auto checkout notice in collapsed state */
+.auto-checkout-notice {
+  font-size: 10px;
+  color: rgba(255,255,255,0.6);
+  margin-top: 0.5rem;
+  text-align: center;
+  display: none;
+}
+
+.resource-box.expanded .auto-checkout-notice {
+  display: block;
 }
 
 .status-vacant {
