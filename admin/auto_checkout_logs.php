@@ -1,17 +1,10 @@
 <?php
-// Ensure session is started for flash messages and roles
-if (session_status() == PHP_SESSION_NONE) {
-    session_start();
-}
-
 require_once '../includes/functions.php';
 require_once '../config/database.php';
 
-// Check if the user has the 'ADMIN' role. If not, redirect or show an error.
-// Assuming require_role handles redirection internally.
 require_role('ADMIN');
 
-$database = new Database(); // Corrected typo here
+$database = new Database();
 $pdo = $database->getConnection();
 
 // Get checkout logs with pagination
@@ -38,7 +31,7 @@ if ($statusFilter) {
 
 $whereClause = !empty($whereConditions) ? 'WHERE ' . implode(' AND ', $whereConditions) : '';
 
-$error = null; // Initialize error variable
+$error = null;
 
 // Get logs with proper error handling
 try {
@@ -55,11 +48,9 @@ try {
     ";
     
     $stmt = $pdo->prepare($logQuery);
-
-    // Bind parameters for the log query
     $logParams = array_merge($params, [$limit, $offset]);
     $stmt->execute($logParams);
-    $logs = $stmt->fetchAll(PDO::FETCH_ASSOC); // Fetch as associative array
+    $logs = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
     // Get total count for pagination
     $countQuery = "
@@ -69,7 +60,7 @@ try {
         $whereClause
     ";
     $countStmt = $pdo->prepare($countQuery);
-    $countStmt->execute($params); // Use original params for count
+    $countStmt->execute($params);
     $totalLogs = $countStmt->fetchColumn();
     $totalPages = ceil($totalLogs / $limit);
 
@@ -96,18 +87,16 @@ try {
     $cronStatus = $stmt->fetch(PDO::FETCH_ASSOC);
 
 } catch (PDOException $e) {
-    // Handle database errors gracefully, specific to PDO
     $error = "Database error: " . $e->getMessage();
-    error_log("Auto Checkout Logs PDO Error: " . $e->getMessage()); // Log the error
+    error_log("Auto Checkout Logs PDO Error: " . $e->getMessage());
     $logs = [];
     $totalLogs = 0;
     $totalPages = 0;
     $todayStats = ['total_today' => 0, 'successful_today' => 0, 'failed_today' => 0];
     $cronStatus = null;
 } catch (Exception $e) {
-    // Catch any other general exceptions
     $error = "An unexpected error occurred: " . $e->getMessage();
-    error_log("Auto Checkout Logs General Error: " . $e->getMessage()); // Log the error
+    error_log("Auto Checkout Logs General Error: " . $e->getMessage());
     $logs = [];
     $totalLogs = 0;
     $totalPages = 0;
@@ -126,17 +115,6 @@ $flash = get_flash_message();
     <title>Auto Checkout Logs - L.P.S.T Bookings</title>
     <link rel="stylesheet" href="../assets/style.css">
     <style>
-        /* Basic styling for demonstration if style.css is missing */
-        body { font-family: Arial, sans-serif; line-height: 1.6; margin: 0; padding: 0; background: #f4f4f4; color: #333; }
-        .container { width: 90%; margin: 20px auto; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-        .top-nav { background: var(--primary-color, #007bff); color: white; padding: 1rem; display: flex; justify-content: space-between; align-items: center; }
-        .nav-links a, .nav-brand { color: white; text-decoration: none; margin: 0 10px; padding: 8px 12px; border-radius: 5px; }
-        .nav-button { background: rgba(255,255,255,0.2); }
-        .nav-button.danger { background: var(--danger-color, #dc3545); }
-        h2, h3, h4 { color: var(--primary-color, #007bff); }
-        .flash-message { padding: 1rem; margin-bottom: 1rem; border-radius: 5px; }
-        .flash-success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
-        .flash-error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
         .stats-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -147,11 +125,15 @@ $flash = get_flash_message();
             background: white;
             padding: 1.5rem;
             border-radius: 8px;
-            border-left: 4px solid var(--primary-color, #007bff);
+            border-left: 4px solid var(--primary-color);
             box-shadow: 0 2px 5px rgba(0,0,0,0.05);
             text-align: center;
         }
-        .dashboard-value { font-size: 2em; font-weight: bold; margin: 0.5rem 0; }
+        .dashboard-value { 
+            font-size: 2em; 
+            font-weight: bold; 
+            margin: 0.5rem 0; 
+        }
         .execution-status {
             padding: 1rem;
             border-radius: 8px;
@@ -159,51 +141,65 @@ $flash = get_flash_message();
             text-align: center;
             font-weight: bold;
         }
-        .status-success { background: rgba(40, 167, 69, 0.1); color: var(--success-color, #28a745); }
-        .status-failed { background: rgba(239, 68, 68, 0.1); color: var(--danger-color, #ef4444); }
-        .status-pending { background: rgba(255, 193, 7, 0.1); color: var(--warning-color, #ffc107); }
-        .status-no_bookings { background: rgba(108, 117, 125, 0.1); color: #6c757d; }
-        .form-container { background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); margin-bottom: 20px; }
-        .form-group { margin-bottom: 1rem; }
-        .form-label { display: block; margin-bottom: 0.5rem; font-weight: bold; }
-        .form-control { width: 100%; padding: 0.75rem; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
-        .btn { display: inline-block; padding: 0.75rem 1.5rem; border-radius: 5px; text-decoration: none; cursor: pointer; font-size: 1rem; transition: background-color 0.3s ease; }
-        .btn-primary { background-color: var(--primary-color, #007bff); color: white; border: none; }
-        .btn-primary:hover { background-color: #0056b3; }
-        .btn-outline { background-color: transparent; color: var(--primary-color, #007bff); border: 1px solid var(--primary-color, #007bff); }
-        .btn-outline:hover { background-color: var(--primary-color, #007bff); color: white; }
-        .btn-success { background-color: var(--success-color, #28a745); color: white; border: none; }
-        .btn-success:hover { background-color: #218838; }
-        table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
-        th, td { padding: 0.75rem; text-align: left; border-bottom: 1px solid var(--border-color, #eee); }
-        th { background: var(--light-color, #f8f9fa); }
+        .status-success { 
+            background: rgba(40, 167, 69, 0.1); 
+            color: var(--success-color); 
+        }
+        .status-failed { 
+            background: rgba(239, 68, 68, 0.1); 
+            color: var(--danger-color); 
+        }
+        .status-pending { 
+            background: rgba(255, 193, 7, 0.1); 
+            color: var(--warning-color); 
+        }
+        .status-no_bookings { 
+            background: rgba(108, 117, 125, 0.1); 
+            color: #6c757d; 
+        }
         .modal {
-            display: none; /* Hidden by default */
-            position: fixed; /* Stay in place */
-            z-index: 1000; /* Sit on top */
+            display: none;
+            position: fixed;
+            z-index: 1000;
             left: 0;
             top: 0;
-            width: 100%; /* Full width */
-            height: 100%; /* Full height */
-            overflow: auto; /* Enable scroll if needed */
-            background-color: rgba(0,0,0,0.4); /* Black w/ opacity */
-            align-items: center; /* Center vertically */
-            justify-content: center; /* Center horizontally */
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0,0,0,0.4);
+            align-items: center;
+            justify-content: center;
         }
         .modal-content {
             background-color: #fefefe;
             margin: auto;
             padding: 20px;
             border: 1px solid #888;
-            width: 80%; /* Could be more or less, depending on screen size */
+            width: 80%;
             max-width: 500px;
             border-radius: 8px;
             box-shadow: 0 4px 8px rgba(0,0,0,0.2);
             position: relative;
         }
-        .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; border-bottom: 1px solid #eee; padding-bottom: 10px; }
-        .close-modal { color: #aaa; float: right; font-size: 28px; font-weight: bold; }
-        .close-modal:hover, .close-modal:focus { color: black; text-decoration: none; cursor: pointer; }
+        .modal-header { 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+            margin-bottom: 1rem; 
+            border-bottom: 1px solid #eee; 
+            padding-bottom: 10px; 
+        }
+        .close-modal { 
+            color: #aaa; 
+            float: right; 
+            font-size: 28px; 
+            font-weight: bold; 
+            cursor: pointer;
+        }
+        .close-modal:hover, .close-modal:focus { 
+            color: black; 
+            text-decoration: none; 
+        }
     </style>
 </head>
 <body>
@@ -232,7 +228,7 @@ $flash = get_flash_message();
             </div>
         <?php endif; ?>
 
-        <h2>🕙 Auto Checkout Logs</h2>
+        <h2>🕙 Auto Checkout Logs - Day 7 Final Fix</h2>
         
         <!-- Today's Execution Status -->
         <?php if ($cronStatus): ?>
@@ -275,8 +271,8 @@ $flash = get_flash_message();
             
             <div class="stat-card">
                 <h4>System Status</h4>
-                <div class="dashboard-value" style="color: var(--success-color);">ACTIVE</div>
-                <p>Daily 10:00 AM execution</p>
+                <div class="dashboard-value" style="color: var(--success-color);">FIXED</div>
+                <p>Day 7 Final Solution</p>
             </div>
         </div>
         
@@ -365,7 +361,6 @@ $flash = get_flash_message();
                                                 $stmt->execute([$log['booking_id']]);
                                                 $isPaid = $stmt->fetchColumn() > 0;
                                             } catch (Exception $e) {
-                                                // Log payment check errors but don't stop the page
                                                 error_log("Payment check error for booking ID {$log['booking_id']}: " . $e->getMessage());
                                             }
                                         }

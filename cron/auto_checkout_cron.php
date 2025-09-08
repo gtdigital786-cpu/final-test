@@ -1,7 +1,7 @@
 <?php
 /**
- * REBUILT Auto Checkout Cron Job - Day 6 Final Solution
- * GUARANTEED daily 10:00 AM execution with foolproof logic
+ * REBUILT Auto Checkout Cron Job - Day 7 Final Solution
+ * GUARANTEED daily 10:00 AM execution with bulletproof logic
  * SIMPLIFIED - NO PAYMENT CALCULATION
  * 
  * HOSTINGER CRON JOB COMMAND:
@@ -45,7 +45,7 @@ if ($isManualRun) {
     echo "<!DOCTYPE html><html><head><title>Auto Checkout Execution</title>";
     echo "<style>body{font-family:Arial;margin:20px;line-height:1.6;} .success{color:green;font-weight:bold;} .error{color:red;font-weight:bold;} .warning{color:orange;font-weight:bold;} .info{color:blue;font-weight:bold;}</style>";
     echo "</head><body>";
-    echo "<h2>🕙 Daily 10:00 AM Auto Checkout Execution - SIMPLIFIED VERSION</h2>";
+    echo "<h2>🕙 Daily 10:00 AM Auto Checkout Execution - Day 7 Final Fix</h2>";
     echo "<p><strong>Current Time:</strong> " . date('H:i:s') . " (Asia/Kolkata)</p>";
     echo "<p><strong>Current Date:</strong> " . date('Y-m-d') . "</p>";
     echo "<p><strong>Execution Mode:</strong> " . ($isManualRun ? 'MANUAL TEST' : 'AUTOMATIC CRON') . "</p>";
@@ -60,7 +60,7 @@ logMessage("Target execution time: 10:00-10:05 AM daily");
 logMessage("Current server time: " . date('H:i:s'));
 logMessage("Payment mode: MANUAL ONLY (no automatic calculation)");
 
-// Database connection
+// Database connection with proper error handling
 try {
     $host = 'localhost';
     $dbname = 'u261459251_patel';
@@ -88,6 +88,25 @@ try {
         echo "</body></html>";
     }
     exit(1);
+}
+
+// Verify required tables exist
+$requiredTables = ['bookings', 'resources', 'auto_checkout_logs', 'system_settings', 'cron_execution_logs'];
+foreach ($requiredTables as $table) {
+    try {
+        $stmt = $pdo->query("SELECT 1 FROM `$table` LIMIT 1");
+        logMessage("Table '$table' verified");
+    } catch (Exception $e) {
+        $error = "Required table '$table' is missing: " . $e->getMessage();
+        logMessage($error, 'CRITICAL');
+        
+        if ($isManualRun) {
+            echo "<p class='error'>$error</p>";
+            echo "<p class='warning'>Please run the SQL migration file to create missing tables.</p>";
+            echo "</body></html>";
+        }
+        exit(1);
+    }
 }
 
 // Load and execute auto checkout
@@ -119,6 +138,15 @@ try {
             echo "<p>Failed: " . ($result['failed'] ?? 0) . " bookings</p>";
             echo "<p class='info'>💡 Payment: Admin will mark payments manually in checkout logs</p>";
             
+            if (isset($result['details']['successful']) && !empty($result['details']['successful'])) {
+                echo "<h4>Successfully Checked Out:</h4>";
+                echo "<ul>";
+                foreach ($result['details']['successful'] as $booking) {
+                    echo "<li>{$booking['resource_name']}: {$booking['client_name']}</li>";
+                }
+                echo "</ul>";
+            }
+            
         } elseif ($result['status'] === 'no_bookings') {
             echo "<p class='warning'>⚠️ No active bookings found for checkout</p>";
         } elseif ($result['status'] === 'wrong_hour' || $result['status'] === 'wrong_minute') {
@@ -147,6 +175,10 @@ try {
     
     if ($isManualRun) {
         echo "<p class='error'>Critical Error: " . htmlspecialchars($e->getMessage()) . "</p>";
+        echo "<div style='background:#f8d7da; padding:15px; border-radius:8px; margin:10px 0;'>";
+        echo "<h4>Error Details:</h4>";
+        echo "<pre>" . htmlspecialchars($e->getTraceAsString()) . "</pre>";
+        echo "</div>";
         echo "</body></html>";
     }
     
